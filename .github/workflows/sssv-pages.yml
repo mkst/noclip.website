@@ -1,0 +1,111 @@
+name: Deploy SSSV demo to GitHub Pages
+
+on:
+  push:
+    branches: [demo]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sssv-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository != 'magcius/noclip.website'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Cache Rust workspace
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: rust/.bin
+          workspaces: rust
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Rust tools
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cd rust
+          cargo install cargo-run-bin --locked
+          cargo bin --install
+
+      - name: Checkout encrypted baserom
+        uses: actions/checkout@v7
+        with:
+          repository: mkst/sssv-private
+          token: ${{ secrets.PRIVATE_REPO_ACCESS }}
+          path: .rom-source
+          persist-credentials: false
+
+      - name: Decrypt and extract US baserom
+        env:
+          SSSV_BASEROM_US: ${{ secrets.SSSV_BASEROM_US }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rom_path="$RUNNER_TEMP/sssv.us.z64"
+          trap 'rm -f "$rom_path"; rm -rf "$GITHUB_WORKSPACE/.rom-source"' EXIT
+          openssl enc -d -aes-256-cbc -pbkdf2 \
+            -pass env:SSSV_BASEROM_US \
+            -in .rom-source/baserom.us.z64.aes -out "$rom_path"
+          printf 'e5e09205aa743a9e5043a42df72adc379c746b0b  %s\n' "$rom_path" | sha1sum --check
+          pnpm build:SSSV --rom "$rom_path"
+
+      - name: Verify all SSSV levels
+        run: pnpm exec tsx src/SSSV/tools/verify.ts --all
+
+      - name: Build SSSV demo
+        env:
+          PUBLIC_SSSV_ONLY: 'true'
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+          PUBLIC_STORAGE_URL: ${{ steps.pages.outputs.base_path }}/data
+        run: pnpm build
+
+      - name: Package extracted SSSV assets
+        run: |
+          mkdir -p dist/data
+          cp -R data/SSSV dist/data/SSSV
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

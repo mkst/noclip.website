@@ -26,6 +26,7 @@ export default defineConfig({
     },
     define: {
       __COMMIT_HASH: JSON.stringify(gitCommit),
+      'import.meta.env.PUBLIC_SSSV_ONLY': JSON.stringify(process.env.PUBLIC_SSSV_ONLY ?? ''),
     },
   },
   html: {
@@ -33,6 +34,7 @@ export default defineConfig({
   },
   output: {
     target: 'web',
+    assetPrefix: process.env.PAGES_BASE_PATH ?? '/',
     // Mark Node.js built-in modules as external.
     externals: ['fs', 'path', 'url'],
     // TODO: These should be converted to use `new URL('./file.wasm', import.meta.url)`

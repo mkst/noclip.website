@@ -103,6 +103,7 @@ import * as Scenes_OuterWilds from './OuterWilds/Scenes.js';
 import * as Scenes_CrashWarped from './CrashWarped/scenes.js';
 import * as Scenes_PlusForXP from './PlusForXP/scenes.js';
 import * as Scenes_MarioKart64 from './MarioKart64/scenes.js';
+import * as Scenes_SSSV from './SSSV/scenes.js';
 import * as Scenes_TopGearRally from './TopGearRally/scenes.js';
 import * as Scenes_KirbyAirRide from './KirbyAirRide/scenes.js';
 import * as Scenes_Descent1 from './Descent1_2/Scenes_Descent1.js';
@@ -144,7 +145,7 @@ import { GfxPlatform } from './gfx/platform/GfxPlatform.js';
 import { SaveState, SaveStateSerializer } from './SaveState.js';
 import ArrayBufferSlice from './ArrayBufferSlice.js';
 
-const sceneGroups: (string | SceneGroup)[] = [
+const sceneGroups: (string | SceneGroup)[] = import.meta.env.PUBLIC_SSSV_ONLY === 'true' ? [Scenes_SSSV.sceneGroup] : [
     "Development",
     Scenes_Example.sceneGroup,
     "Wii",
@@ -194,6 +195,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,
+    Scenes_SSSV.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
     "PlayStation 2",
     Scenes_DragonQuest8.sceneGroup,

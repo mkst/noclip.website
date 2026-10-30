@@ -461,6 +461,7 @@ export class RSPState implements RSPStateInterface {
      * instead of assuming vertices are preloaded.
      */
     public loadVerticesOnDemand = false;
+    public deinterleaveTextures = true;
 
     private readonly output = new RSPOutput();
 
@@ -751,13 +752,12 @@ export class RSPState implements RSPStateInterface {
             dramPalAddr = palAddr ?? 0;
         }
 
-        // TGR texture data requires TMEM deinterleaving for correct decode.
         return this.sharedOutput.textureCache.translateTileTexture(
             this.segmentBuffers,
             dramAddr,
             dramPalAddr,
             tile,
-            true,
+            this.deinterleaveTextures,
         );
     }
 
