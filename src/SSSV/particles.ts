@@ -5,6 +5,7 @@ import { MAP_X_POINTS, MAP_Z_POINTS } from "./level.js";
 import type { SSSVObjectData } from "./objects.js";
 import type { ParticleDefinition } from "./particle_assets.js";
 import { assert } from "../util.js";
+import type { FireFoxParticleSimulation } from "./fire_fox_effects.js";
 
 export interface TorchEmitter {
     placementIndex: number;
@@ -136,13 +137,14 @@ export class ParticleSimulation {
     public particles: ParticleSprite[] = [];
     public readonly textureIds: number[];
 
-    constructor(public readonly torch: TorchSimulation | null, private torchDefinition: ParticleDefinition | null, public readonly script: ScriptParticleSimulation | null, private events: { readonly particles: readonly ParticleSprite[]; readonly textureIds: readonly number[] } | null = null, private rain: { readonly particles: readonly ParticleSprite[]; readonly textureIds: readonly number[] } | null = null, private arrival: { readonly particles: readonly ParticleSprite[]; readonly textureIds: readonly number[] } | null = null) {
+    constructor(public readonly torch: TorchSimulation | null, private torchDefinition: ParticleDefinition | null, public readonly script: ScriptParticleSimulation | null, private events: { readonly particles: readonly ParticleSprite[]; readonly textureIds: readonly number[] } | null = null, private rain: { readonly particles: readonly ParticleSprite[]; readonly textureIds: readonly number[] } | null = null, private arrival: { readonly particles: readonly ParticleSprite[]; readonly textureIds: readonly number[] } | null = null, public readonly fireFox: FireFoxParticleSimulation | null = null) {
         this.textureIds = [
             ...(torch !== null ? Array.from({ length: TORCH_PARTICLE_ASSETS.textureCount }, (_, i) => TORCH_PARTICLE_ASSETS.textureIdBase + i) : []),
             ...(script !== null ? Array.from({ length: SCRIPT_PARTICLE_TEXTURE_OFFSETS.length }, (_, i) => SCRIPT_PARTICLE_TEXTURE_BASE + i) : []),
             ...(events?.textureIds ?? []),
             ...(rain?.textureIds ?? []),
             ...(arrival?.textureIds ?? []),
+            ...(fireFox?.textureIds ?? []),
         ];
     }
 
@@ -160,6 +162,10 @@ export class ParticleSimulation {
             this.particles.push(...this.events.particles);
         if (this.rain !== null) this.particles.push(...this.rain.particles);
         if (this.arrival !== null) this.particles.push(...this.arrival.particles);
+        if (this.fireFox !== null) {
+            this.fireFox.advanceTo(tick);
+            this.particles.push(...this.fireFox.particles);
+        }
         if (this.particles.length > 255) this.particles.splice(0, this.particles.length - 255);
     }
 }

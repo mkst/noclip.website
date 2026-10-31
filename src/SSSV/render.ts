@@ -1,3 +1,11 @@
+import { FloorButtonVisuals } from './floor_buttons.js';
+import type { LagoonMachineVisuals } from './lagoon_machine_renderer.js';
+import { MACHINE_PADS, MACHINE_LEVERS } from './lagoon_machine.js';
+import type { LiveAnimalSpawnVisuals } from "./live_animal_renderer.js";
+import { createMusicPanel } from "./music_panel.js";
+import type { MusicPlayer } from "./music.js";
+import type { SnowPlatformVisuals } from "./snow_platform_renderer.js";
+import type { ObjectCommandRuntime } from "./object_commands.js";
 import type { ElevatorVisuals } from "./elevator_renderer.js";
 import { ARRIVAL_VERTEX_COUNT } from "./arrival.js";
 import type { ArrivalVisuals } from "./arrival.js";
@@ -54,8 +62,9 @@ import { mirrorZ } from "./level.js";
 import type { PathOverlay } from "./path_overlay.js";
 import { ParticleSimulation, particleProjectedHalfSize } from "./particles.js";
 import type { StaticAnimalBuild } from "./animal_renderer.js";
-import { updateAnimalTail, updateAnimalWool } from "./animal_renderer.js";
-import { sampleAnimalEyeFrame, sampleAnimalEyeRed } from "./animal_eyes.js";
+import { updateAnimalFlame, updateAnimalTail, updateAnimalWool, updateMysteryBear } from "./animal_renderer.js";
+import { updateMysteryBearSpotlights } from "./mystery_bear_spotlights.js";
+import { sampleAnimalEyeFrame, sampleAnimalEyeIndices, sampleAnimalEyeRed } from "./animal_eyes.js";
 
 const BUTTONS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
     <path d="M8 8l3 13 3-5 5-3L8 8z" fill="white" stroke="white" stroke-linejoin="round"/>
@@ -590,7 +599,6 @@ class SSSVDrawCallInstance {
     private texturesEnabled = true;
     private fogEnabled = false;
     private wireframeEnabled = false;
-    private pathMotionEnabled = true;
     private pathStartTick = -1;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private program!: DeviceProgram;
@@ -733,6 +741,8 @@ class SSSVDrawCallInstance {
             }
         }
         const eyeAnimation = this.drawCall.animalEyeAnimation;
+        if (this.drawCall.animalEyeGlow && sampleAnimalEyeIndices(getGameTick(viewerInput.time))[0] === 5)
+            return;
         if (eyeAnimation?.kind === "primitive")
             this.drawCall.DP_PrimColor[0] = sampleAnimalEyeRed(getGameTick(viewerInput.time), eyeAnimation.deactivated) / 255;
         if (this.gfxProgram === null)
@@ -756,7 +766,7 @@ class SSSVDrawCallInstance {
             const frame = teleporter !== null ? teleporterFrame(getGameTick(viewerInput.time), teleporter.arrivalState ?? teleporter.state, teleporter.previewActive)
                 : this.drawCall.switchBall !== null ? this.drawCall.switchBall.state === 1 ? 0 : 1 : eyeAnimation?.kind === "texture"
                 ? sampleAnimalEyeFrame(getGameTick(viewerInput.time), eyeAnimation.family, eyeAnimation.side, eyeAnimation.deactivated)
-                : textureAnimationFrame(getGameTick(viewerInput.time) * this.drawCall.animationFrameRate / GAME_TICK_RATE, this.animationTextureMappings.length, this.drawCall.animationLoopStartFrame);
+                : this.drawCall.commandTextureFrame ?? textureAnimationFrame(getGameTick(viewerInput.time) * this.drawCall.animationFrameRate / GAME_TICK_RATE, this.animationTextureMappings.length, this.drawCall.animationLoopStartFrame);
             renderInst.setSamplerBindingsFromTextureMappings([this.animationTextureMappings[frame]]);
         } else {
             renderInst.setSamplerBindingsFromTextureMappings(this.animationTextureMappings1.length !== 0
@@ -770,7 +780,7 @@ class SSSVDrawCallInstance {
         const objectTick = getGameTick(viewerInput.time);
         if (this.pathStartTick === -1 || objectTick < this.pathStartTick)
             this.pathStartTick = objectTick;
-        const pathTick = this.pathMotionEnabled ? objectTick - this.pathStartTick : 0;
+        const pathTick = objectTick - this.pathStartTick;
         if (this.drawCall.leverHandle !== null && this.drawCall.modelMatrix !== null) {
             computeLeverHandleMatrix(this.drawCall.modelMatrix, this.drawCall.leverHandle);
             vec3.transformMat4(drawCenterScratch, drawCenterScratch, this.drawCall.modelMatrix);
@@ -875,10 +885,6 @@ class SSSVDrawCallInstance {
         this.createProgram();
     }
 
-    public setPathMotionEnabled(enabled: boolean): void {
-        this.pathMotionEnabled = enabled;
-    }
-
     public setWireframeEnabled(enabled: boolean): void {
         this.wireframeEnabled = enabled;
     }
@@ -910,7 +916,6 @@ export class SSSVRenderer implements Viewer.SceneGfx {
     private animalMarkerSelect: HTMLSelectElement | null = null;
     private animalsVisible = true;
     private animalSpawnPreviewEnabled = false;
-    private pathMotionEnabled = true;
     private buttonInput: ButtonInput | null = null;
     private buttonCamera: Camera | null = null;
     private buttonStatus: HTMLElement | null = null;
@@ -920,17 +925,31 @@ export class SSSVRenderer implements Viewer.SceneGfx {
     private lastSceneTick = 0;
     private arrivalRevision = -1;
     private elevatorStatus: HTMLDivElement | null = null;
+    private objectScriptStatus: HTMLDivElement | null = null;
+    private emitterScriptStatus: HTMLDivElement | null = null;
+    private eventScriptStatus: HTMLDivElement | null = null;
+    private machineStatus: HTMLDivElement | null = null;
+    private syncMachineControls: (() => void) | null = null;
+    private snowPlatformStatus: HTMLDivElement | null = null;
+    private liveSpawnStatus: HTMLDivElement | null = null;
+    private syncSnowControls: (() => void) | null = null;
+    private syncLiveControls: (() => void) | null = null;
     private objectMarkersEnabled = false;
+    public readonly floorButtons: FloorButtonVisuals;
     private buttonColors: { call: SSSVDrawCall; red: number }[] = [];
+    public music: MusicPlayer | null = null;
 
-    constructor(device: GfxDevice, private sharedOutput: RSPSharedOutput, drawCalls: SSSVDrawCall[], fences: FenceSpan[], public levelName: string, public faceCount: number, private initialWorldMatrix: mat4, private clearColor: Color, private animalMarkers: AnimalMarker[], hangingRibbons: HangingRibbon[], fogNear: number, fogFar: number, fogColor: Color, private pathOverlay: PathOverlay, particleSimulation: ParticleSimulation | null = null, public readonly animalStaticBuilds: readonly StaticAnimalBuild[] = [], private animalSpawnMarkers: AnimalMarker[] = [], private levelEvents: BoulderEventVisuals | null = null, public readonly rain: RainSimulation | null = null, public readonly fenceSwitch: FenceSwitchRuntime | null = null, public readonly objectMarkers: readonly ObjectMarker[] = [], public readonly arrival: ArrivalVisuals | null = null, public readonly elevator: ElevatorVisuals | null = null) {
+    constructor(device: GfxDevice, private sharedOutput: RSPSharedOutput, drawCalls: SSSVDrawCall[], fences: FenceSpan[], public levelName: string, public faceCount: number, private initialWorldMatrix: mat4, private clearColor: Color, private animalMarkers: AnimalMarker[], hangingRibbons: HangingRibbon[], fogNear: number, fogFar: number, fogColor: Color, private pathOverlay: PathOverlay, particleSimulation: ParticleSimulation | null = null, public readonly animalStaticBuilds: readonly StaticAnimalBuild[] = [], private animalSpawnMarkers: AnimalMarker[] = [], private levelEvents: BoulderEventVisuals | null = null, public readonly rain: RainSimulation | null = null, public readonly fenceSwitch: FenceSwitchRuntime | null = null, public readonly objectMarkers: readonly ObjectMarker[] = [], public readonly arrival: ArrivalVisuals | null = null, public readonly elevator: ElevatorVisuals | null = null, public readonly objectCommands: ObjectCommandRuntime | null = null, public readonly snowPlatforms: SnowPlatformVisuals | null = null, public readonly liveAnimalSpawns: LiveAnimalSpawnVisuals | null = null, public readonly lagoonMachine: LagoonMachineVisuals | null = null) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderData = new RenderData(device, this.renderHelper.renderCache, sharedOutput, 1, arrival !== null || animalStaticBuilds.some(build => build.wool !== null || build.tail !== null));
+        this.levelEvents?.setEnabled(true);
+        this.renderData = new RenderData(device, this.renderHelper.renderCache, sharedOutput, 1, arrival !== null || animalStaticBuilds.some(build => build.wool !== null || build.tail !== null || build.flame !== null || build.mysteryBear !== null));
         for (const drawCall of drawCalls)
             this.drawCallInstances.push(new SSSVDrawCallInstance(device, this.renderHelper.renderCache, sharedOutput, drawCall, this.textureCache));
         if (rain !== null)
             this.buttonColors = drawCalls.filter(c => c.objectPlacementIndex === rain.button.config.placementIndex && c.objectStateColor).map(call => ({ call, red: call.DP_PrimColor[0] }));
         this.pickDrawCalls = drawCalls;
+        this.floorButtons = new FloorButtonVisuals(drawCalls);
+        this.updateFloorButtons();
         this.animalMarkerDrawCalls = drawCalls.filter(draw => draw.layer === SSSVLayer.AnimalMarkers || draw.layer === SSSVLayer.AnimalSpawnMarkers);
         this.updateAnimalSpawnPreviewVisibility();
         if (fences.length !== 0)
@@ -945,13 +964,28 @@ export class SSSVRenderer implements Viewer.SceneGfx {
 
     public installButtonInput(element: HTMLElement, camera: Camera): void {
         this.buttonCamera = camera;
-        if (this.buttonControl === null) return;
+        if (this.buttonControl === null && this.snowPlatforms === null && this.lagoonMachine === null) return;
         this.buttonInput?.destroy();
+        let snowSwitch: number | null = null;
+        let machineControl: number | null = null;
         this.buttonInput = new ButtonInput(element, (x, y) => {
-            if (!this.buttonControl!.enabled || !this.objectsEnabled) return false;
+            if (!this.objectsEnabled) return false;
             const rect = element.getBoundingClientRect();
+            if (this.lagoonMachine !== null) {
+                const r = this.lagoonMachine.runtime;
+                machineControl = [...MACHINE_PADS, ...MACHINE_LEVERS].find(i => r.ready(i) && pickButton(camera, (x - rect.left) / rect.width * 2 - 1,
+                    1 - (y - rect.top) / rect.height * 2, this.sharedOutput, this.pickDrawCalls, i)) ?? null;
+                return machineControl !== null;
+            }
+            if (this.snowPlatforms !== null) {
+                const r = this.snowPlatforms.runtime;
+                snowSwitch = [4, 5, 27].find(i => r.switchReady(i) && pickButton(camera, (x - rect.left) / rect.width * 2 - 1,
+                    1 - (y - rect.top) / rect.height * 2, this.sharedOutput, this.pickDrawCalls, i)) ?? null;
+                return snowSwitch !== null;
+            }
+            if (!this.buttonControl!.enabled) return false;
             return pickButton(camera, (x - rect.left) / rect.width * 2 - 1, 1 - (y - rect.top) / rect.height * 2, this.sharedOutput, this.pickDrawCalls, this.buttonControl!.config.placementIndex);
-        }, () => { this.buttonControl!.activate(); });
+        }, () => { if (machineControl !== null) this.lagoonMachine!.runtime.activate(machineControl); else if (snowSwitch !== null) this.snowPlatforms!.runtime.activateSwitch(snowSwitch); else this.buttonControl!.activate(); });
     }
 
     private get buttonControl() { return this.rain?.button ?? this.fenceSwitch; }
@@ -1009,12 +1043,19 @@ export class SSSVRenderer implements Viewer.SceneGfx {
         this.setLayerVisible(SSSVLayer.Upper, enabled);
     }
 
+    private updateFloorButtons(): void {
+        this.floorButtons.update(this.objectsEnabled, index => this.lagoonMachine?.runtime.enabled
+            ? this.lagoonMachine.runtime.world.getEntity(`object:${index}`)?.state ?? null : null);
+    }
+
     public setObjectsEnabled(enabled: boolean): void {
         this.objectsEnabled = enabled;
         this.setLayerVisible(SSSVLayer.Objects, enabled);
+        this.updateFloorButtons();
         this.setTeleporterPreviewActive(this.teleporterPreviewActive);
         this.updateArrivalState();
         this.elevator?.update(enabled);
+        this.snowPlatforms?.update(enabled);
         if (this.levelEvents !== null) {
             this.levelEvents.objectsEnabled = enabled;
             if (!enabled) this.levelEvents.hide();
@@ -1057,13 +1098,6 @@ export class SSSVRenderer implements Viewer.SceneGfx {
         this.hangingRenderer?.setEnabled(enabled);
     }
 
-    public setPathMotionEnabled(enabled: boolean): void {
-        this.pathMotionEnabled = enabled;
-        if (this.elevator !== null) this.elevator.runtime.motionEnabled = enabled;
-        for (const instance of this.drawCallInstances)
-            instance.setPathMotionEnabled(enabled);
-    }
-
     public setAnimalMarkersEnabled(enabled: boolean): void {
         this.setAnimalMarkerMode(enabled ? "all" : "off");
     }
@@ -1090,6 +1124,7 @@ export class SSSVRenderer implements Viewer.SceneGfx {
     }
 
     private updateAnimalSpawnPreviewVisibility(): void {
+        this.liveAnimalSpawns?.update(this.animalsVisible, this.animalMarkerMode);
         this.setLayerVisible(SSSVLayer.AnimalSpawnPreview, this.animalSpawnPreviewEnabled && this.animalsVisible);
         for (const draw of this.animalMarkerDrawCalls)
             draw.visible = isAnimalMarkerVisible(this.animalMarkerMode, draw.animalMarkerHasModel, this.animalsVisible)
@@ -1184,21 +1219,21 @@ export class SSSVRenderer implements Viewer.SceneGfx {
             renderHacksPanel.contents.appendChild(spawnPreview.elem);
         }
 
-        if (this.levelEvents !== null) {
-            const events = new UI.Checkbox("Enable Scripted Level Events", false);
-            events.elem.title = this.levelEvents.simulation.config.region === null
-                ? "JUNGLE_DOLDRUMS launchers run their autonomous spawn cycles."
-                : "ROCKY_HARD_PLACE boulders activate when the camera enters the original player trigger region.";
-            events.onchanged = () => this.setScriptedLevelEventsEnabled(events.checked);
-            renderHacksPanel.contents.appendChild(events.elem);
-        }
-
         const panels = [renderHacksPanel, this.pathOverlay.createPanel()];
+        if (this.music !== null) panels.push(createMusicPanel(this.music));
         const control = this.buttonControl;
         const teleporters = this.pickDrawCalls.filter(c => c.teleporter?.part === "fan");
         const panel = new UI.Panel();
         panel.customHeaderBackgroundColor = 'rgb(137, 69, 205)';
         panel.setTitle(BUTTONS_ICON, "Interactions");
+        if (this.levelEvents !== null) {
+            const events = new UI.Checkbox("Enable Scripted Level Events", this.levelEvents.simulation.enabled);
+            events.elem.title = this.levelEvents.simulation.config.region === null
+                ? "JUNGLE_DOLDRUMS launchers run their autonomous spawn cycles."
+                : "ROCKY_HARD_PLACE boulders activate when the camera enters the original player trigger region.";
+            events.onchanged = () => this.setScriptedLevelEventsEnabled(events.checked);
+            panel.contents.appendChild(events.elem);
+        }
         if (control !== null) {
             const name = this.rain !== null ? "Rain Lever" : "Fence Switch";
             const enabled = new UI.Checkbox("Enable Button Interactions", control.enabled);
@@ -1266,16 +1301,135 @@ export class SSSVRenderer implements Viewer.SceneGfx {
             };
             panel.contents.appendChild(focus);
             const note = document.createElement('div'); note.style.fontSize = '12px';
-            note.textContent = "Scripted platform and rotating companion. Visual preview; no collision or riding. Animate Path Objects pauses the whole cycle.";
+            note.textContent = "Scripted platform and rotating companion. Visual preview; no collision or riding. Use the viewer pause control to pause the cycle.";
             panel.contents.appendChild(note);
             this.elevatorStatus = document.createElement('div');
             this.elevatorStatus.style.fontSize = '12px';
             panel.contents.appendChild(this.elevatorStatus);
         }
 
-        const pathMotion = new UI.Checkbox("Animate Path Objects", this.pathMotionEnabled);
-        pathMotion.onchanged = () => this.setPathMotionEnabled(pathMotion.checked);
-        panel.contents.appendChild(pathMotion.elem);
+        if (this.lagoonMachine !== null) {
+            const visual = this.lagoonMachine, r = visual.runtime;
+            const enabled = new UI.Checkbox('Enable Scripted Machine', r.enabled);
+            enabled.onchanged = () => { r.setEnabled(enabled.checked); visual.update(this.objectsEnabled); this.syncMachineControls?.(); };
+            panel.contents.appendChild(enabled.elem);
+            const buttons: { index: number; button: HTMLButtonElement }[] = [];
+            for (const [indices, name] of [[MACHINE_PADS, 'Floor Pad'], [MACHINE_LEVERS, 'Arm Lever']] as const) {
+                const row = document.createElement('div');
+                for (const [n, index] of indices.entries()) {
+                    const button = document.createElement('button'); button.textContent = `${name} ${n + 1}`;
+                    button.onclick = () => r.activate(index); row.appendChild(button); buttons.push({ index, button });
+                }
+                panel.contents.appendChild(row);
+            }
+            this.syncMachineControls = () => { for (const { index, button } of buttons) button.disabled = !r.ready(index); };
+            this.syncMachineControls();
+            const focus = document.createElement('button'); focus.textContent = 'Go to Machine';
+            focus.onclick = () => {
+                if (!this.buttonCamera) return;
+                mat4.targetTo(this.buttonCamera.worldMatrix, [2328, 1408, mirrorZ(2112) + 750], [1728, 850, mirrorZ(2112)], [0, 1, 0]);
+                this.buttonCamera.worldMatrixUpdated();
+            }; panel.contents.appendChild(focus);
+            const reset = document.createElement('button'); reset.textContent = 'Reset Machine';
+            reset.onclick = () => { r.reset(); visual.update(this.objectsEnabled); this.syncMachineControls?.(); }; panel.contents.appendChild(reset);
+            const note = document.createElement('div'); note.style.fontSize = '12px';
+            note.textContent = 'Click pads/levers in the scene or use these buttons. Pads time out; each lever slows its linked arm. Smoke, audio and the completion cinematic are not rendered.';
+            panel.contents.appendChild(note);
+            this.machineStatus = document.createElement('div'); this.machineStatus.style.fontSize = '12px'; panel.contents.appendChild(this.machineStatus);
+        }
+
+        if (this.liveAnimalSpawns !== null) {
+            const visual = this.liveAnimalSpawns, r = visual.runtime;
+            const enabled = new UI.Checkbox('Enable Scripted Animal Spawns', false);
+            enabled.onchanged = () => { r.setEnabled(enabled.checked); visual.update(this.animalsVisible, this.animalMarkerMode); this.syncLiveControls?.(); };
+            panel.contents.appendChild(enabled.elem);
+            const stageButtons: HTMLButtonElement[] = [];
+            for (const [stage, label] of [['foxes', 'Fox Stage'], ['dogs', 'First Dog Wave'], ['laterDogs', 'Second Dog Wave']] as const) {
+                const button = document.createElement('button'); button.textContent = label; button.onclick = () => r.setStage(stage);
+                stageButtons.push(button); panel.contents.appendChild(button);
+            }
+            const next = document.createElement('button'); next.textContent = 'Continue Spawn Sequence'; next.onclick = () => r.continueSequence(); panel.contents.appendChild(next);
+            const reset = document.createElement('button'); reset.textContent = 'Reset Animal Spawns';
+            reset.onclick = () => { r.reset(); visual.update(this.animalsVisible, this.animalMarkerMode); }; panel.contents.appendChild(reset);
+            const focus = document.createElement('button'); focus.textContent = 'Go to Spawned Animals';
+            focus.onclick = () => {
+                if (this.buttonCamera === null) return;
+                const p = [...r.world.animals.values()].at(-1)?.placement; if (!p) return;
+                mat4.targetTo(this.buttonCamera.worldMatrix, [p.x + 300, p.y + 180, mirrorZ(p.z) + 400], [p.x, p.y + 40, mirrorZ(p.z)], [0, 1, 0]);
+                this.buttonCamera.worldMatrixUpdated();
+            };
+            panel.contents.appendChild(focus);
+            this.syncLiveControls = () => { for (const b of stageButtons) b.disabled = !r.enabled; next.disabled = !r.enabled || !r.world.message && !r.world.cutsceneRequested; focus.disabled = r.world.animals.size === 0; };
+            this.syncLiveControls();
+            const note = document.createElement('div'); note.style.fontSize = '12px';
+            note.textContent = 'Manual stage inputs; spawned animals remain idle. Navigation and scripted cameras are held. The spawn-site preview remains separate.';
+            panel.contents.appendChild(note);
+            this.liveSpawnStatus = document.createElement('div'); this.liveSpawnStatus.style.fontSize = '12px'; panel.contents.appendChild(this.liveSpawnStatus);
+        }
+
+        if (this.snowPlatforms !== null) {
+            const visual = this.snowPlatforms, r = visual.runtime;
+            const enabled = new UI.Checkbox("Enable Scripted Platforms", r.enabled);
+            enabled.onchanged = () => { r.setEnabled(enabled.checked); standing.value = ''; visual.update(this.objectsEnabled, this.lastSceneTick); this.syncSnowControls?.(); };
+            panel.contents.appendChild(enabled.elem);
+            const switches: { index: number; button: HTMLButtonElement }[] = [];
+            for (const [index, name] of [[4, 'Platform Visibility Switch'], [5, 'Bottom Fan / Orbiting Platforms Switch'], [27, 'Other Fan Switch']] as const) {
+                const row = document.createElement('div');
+                const button = document.createElement('button'); button.textContent = name; button.onclick = () => r.activateSwitch(index);
+                switches.push({ index, button }); row.appendChild(button);
+                const focus = document.createElement('button'); focus.textContent = 'Go to Switch'; focus.setAttribute('aria-label', `Go to ${name}`);
+                focus.onclick = () => {
+                    if (!this.buttonCamera) return;
+                    const p = r.config.placements[index];
+                    mat4.targetTo(this.buttonCamera.worldMatrix, [p.x + 180, p.y + 180, mirrorZ(p.z) + 260], [p.x, p.y + 35, mirrorZ(p.z)], [0, 1, 0]);
+                    this.buttonCamera.worldMatrixUpdated();
+                }; row.appendChild(focus); panel.contents.appendChild(row);
+            }
+            const label = document.createElement('label'); label.textContent = 'Standing on ';
+            const standing = document.createElement('select'); standing.setAttribute('aria-label', 'Standing on platform');
+            for (const [value, text] of [['', 'None'], ['8', 'Platform A (path 0)'], ['2', 'Platform B (path 1)'], ['3', 'Invisible platform (path 9)']]) {
+                const option = document.createElement('option'); option.value = value; option.textContent = text; standing.appendChild(option);
+            }
+            standing.onchange = () => r.setStanding(standing.value === '' ? null : Number(standing.value));
+            label.appendChild(standing); panel.contents.appendChild(label);
+            this.syncSnowControls = () => { for (const { index, button } of switches) button.disabled = !r.switchReady(index); standing.value = r.world.standingOn?.split(':')[1] ?? ''; };
+            this.syncSnowControls();
+            const reveal = new UI.Checkbox("Reveal Invisible Platform (Preview)", false);
+            reveal.onchanged = () => { visual.revealInvisible = reveal.checked; visual.update(this.objectsEnabled, this.lastSceneTick); };
+            panel.contents.appendChild(reveal.elem);
+            const reset = document.createElement('button'); reset.textContent = 'Reset Platforms';
+            reset.onclick = () => { r.reset(); standing.value = ''; visual.update(this.objectsEnabled, this.lastSceneTick); this.syncSnowControls?.(); };
+            panel.contents.appendChild(reset);
+            const focus = document.createElement('button'); focus.textContent = 'Go to Platform';
+            focus.onclick = () => {
+                if (this.buttonCamera === null) return;
+                const o = r.world.objects.get(`object:${standing.value || '8'}`)!, [x, y, z] = Array.from(o.fixedPosition, v => v / 65536);
+                mat4.targetTo(this.buttonCamera.worldMatrix, [x + (standing.value === '3' ? -500 : 500), y + 300, mirrorZ(z) + 600], [x, y + 60, mirrorZ(z)], [0, 1, 0]);
+                this.buttonCamera.worldMatrixUpdated();
+            };
+            panel.contents.appendChild(focus);
+            const note = document.createElement('div'); note.style.fontSize = '12px';
+            note.textContent = 'Click a switch in the scene or use its button above. Invisible platform: stand to depart, select None to return, then repeat. No riding. Audio, notices and camera fades are suppressed. Disable to restore automatic path preview.';
+            panel.contents.appendChild(note);
+            this.snowPlatformStatus = document.createElement('div'); this.snowPlatformStatus.style.fontSize = '12px'; panel.contents.appendChild(this.snowPlatformStatus);
+        }
+
+        if (this.objectCommands !== null) {
+            const reset = document.createElement('button'); reset.textContent = "Reset Scripted Props";
+            reset.onclick = () => this.objectCommands!.reset();
+            panel.contents.appendChild(reset);
+            this.objectScriptStatus = document.createElement('div'); this.objectScriptStatus.style.fontSize = '12px';
+            panel.contents.appendChild(this.objectScriptStatus);
+        }
+
+        if (this.particleRenderer?.simulation.script?.programs !== null && this.particleRenderer?.simulation.script?.programs !== undefined) {
+            this.emitterScriptStatus = document.createElement('div'); this.emitterScriptStatus.style.fontSize = '12px';
+            panel.contents.appendChild(this.emitterScriptStatus);
+        }
+        if (this.levelEvents !== null) {
+            this.eventScriptStatus = document.createElement('div'); this.eventScriptStatus.style.fontSize = '12px';
+            panel.contents.appendChild(this.eventScriptStatus);
+        }
 
         panels.push(panel);
         return panels;
@@ -1283,6 +1437,37 @@ export class SSSVRenderer implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const tick = this.lastSceneTick = getGameTick(viewerInput.time);
+        this.lagoonMachine?.runtime.advanceTo(tick);
+        this.lagoonMachine?.update(this.objectsEnabled);
+        this.updateFloorButtons();
+        this.syncMachineControls?.();
+        if (this.machineStatus !== null && this.lagoonMachine !== null) {
+            const r = this.lagoonMachine.runtime;
+            const errors = [...r.world.programs.values()].flatMap(vm => vm.diagnostic ? [`C${vm.diagnostic.commandIndex}: ${vm.diagnostic.reason}`] : []);
+            const pads = MACHINE_PADS.map((index, n) => r.world.getEntity(`object:${index}`)!.state === 1 ? n + 1 : null).filter(n => n !== null);
+            this.machineStatus.textContent = errors.length ? errors.join('; ') : !r.enabled ? 'Machine scripts disabled.'
+                : `Active pads: ${pads.join(', ') || 'none'}; levers used: ${r.world.globals[1]}/4; floor-pad gate ${r.world.globals[0] === 4 ? 'unlocked' : 'locked'}.`;
+        }
+        this.liveAnimalSpawns?.runtime.advanceTo(tick);
+        this.liveAnimalSpawns?.update(this.animalsVisible, this.animalMarkerMode);
+        this.syncLiveControls?.();
+        if (this.liveSpawnStatus !== null && this.liveAnimalSpawns !== null) {
+            const r = this.liveAnimalSpawns.runtime, errors = [...r.world.programs.values()].flatMap(vm => vm.diagnostic ? [`C${vm.diagnostic.commandIndex}: ${vm.diagnostic.reason}`] : []);
+            this.liveSpawnStatus.textContent = errors.length ? errors.join('; ') : !r.enabled ? 'Live spawning disabled.' : r.world.message ? 'Dog-wave notice: use Continue Spawn Sequence.'
+                : r.world.cutsceneRequested ? 'Sequence gate: use Continue Spawn Sequence.' : `${r.world.animals.size} animals spawned; navigation held.`;
+        }
+        this.snowPlatforms?.runtime.advanceTo(tick);
+        this.syncSnowControls?.();
+        this.snowPlatforms?.update(this.objectsEnabled, tick);
+        if (this.snowPlatformStatus !== null && this.snowPlatforms !== null) {
+            const r = this.snowPlatforms.runtime, errors = [...r.world.programs.values()].flatMap(vm => vm.diagnostic ? [`C${vm.diagnostic.commandIndex}: ${vm.diagnostic.reason}`] : []);
+            this.snowPlatformStatus.textContent = errors.length ? errors.join('; ') : !r.enabled ? 'Automatic path preview.' : !r.motionEnabled ? 'Platforms paused.' : `Scripted switches active; bottom fan ${r.world.globals[0] ? 'on' : 'off'}, other fan ${r.world.fanSlots.get(2)!.enabled ? 'on' : 'off'}.`;
+        }
+        this.objectCommands?.advanceTo(tick);
+        if (this.objectScriptStatus !== null && this.objectCommands !== null) {
+            const errors = this.objectCommands.entries.flatMap(e => e.vm.diagnostic ? [`Object ${e.config.placementIndex}: ${e.vm.diagnostic.reason}`] : []);
+            this.objectScriptStatus.textContent = errors.length ? errors.join('; ') : `${this.objectCommands.entries.length} scripted props active.`;
+        }
         this.elevator?.runtime.advanceTo(tick);
         this.elevator?.update(this.objectsEnabled);
         if (this.elevatorStatus !== null && this.elevator !== null) {
@@ -1320,7 +1505,26 @@ export class SSSVRenderer implements Viewer.SceneGfx {
             : control.ready ? this.fenceSwitch !== null ? `Fence ${control.state === 1 ? "on" : "off"} — ready` : "Ready — click the lever"
             : this.fenceSwitch !== null ? "Switch busy" : "Rain cycle running (12 seconds)");
         this.levelEvents?.update(tick, viewerInput.camera.worldMatrix[12], mirrorZ(viewerInput.camera.worldMatrix[14]));
+        if (this.eventScriptStatus !== null && this.levelEvents !== null) {
+            const diagnostics = this.levelEvents.simulation.commands.diagnostics;
+            this.eventScriptStatus.textContent = diagnostics.length ? `Level event stopped: ${diagnostics.map(d => `${d.id} C${d.commandIndex}: ${d.reason}`).join('; ')}` : '';
+        }
         for (const build of this.animalStaticBuilds) {
+            const mysteryBear = build.mysteryBear;
+            if (mysteryBear !== null && updateMysteryBear(mysteryBear, this.renderData.vertexBufferData, tick)) {
+                const byteOffset = mysteryBear.firstVertex * 40;
+                device.uploadBufferData(this.renderData.vertexBuffer, byteOffset, new Uint8Array(this.renderData.vertexBufferData.buffer, byteOffset, mysteryBear.vertexCount * 40));
+            }
+            const spotlights = mysteryBear?.spotlights;
+            if (spotlights && updateMysteryBearSpotlights(spotlights, this.renderData.vertexBufferData, tick, [viewerInput.camera.worldMatrix[12], viewerInput.camera.worldMatrix[13], mirrorZ(viewerInput.camera.worldMatrix[14])])) {
+                const byteOffset = spotlights.firstVertex * 40;
+                device.uploadBufferData(this.renderData.vertexBuffer, byteOffset, new Uint8Array(this.renderData.vertexBufferData.buffer, byteOffset, spotlights.vertexCount * 40));
+            }
+            const flame = build.flame;
+            if (flame !== null && updateAnimalFlame(flame, this.renderData.vertexBufferData, tick)) {
+                const byteOffset = flame.firstVertex * 40;
+                device.uploadBufferData(this.renderData.vertexBuffer, byteOffset, new Uint8Array(this.renderData.vertexBufferData.buffer, byteOffset, flame.vertexCount * 40));
+            }
             const tail = build.tail;
             if (tail !== null && updateAnimalTail(tail, this.renderData.vertexBufferData, tick)) {
                 const byteOffset = tail.firstVertex * 40;
@@ -1348,6 +1552,11 @@ export class SSSVRenderer implements Viewer.SceneGfx {
         this.hangingRenderer?.prepareToRender(device, this.renderHelper, viewerInput);
         this.fenceRenderer?.prepareToRender(device, this.renderHelper, viewerInput);
         this.particleRenderer?.prepareToRender(device, this.renderHelper, viewerInput);
+        if (this.emitterScriptStatus !== null) {
+            const programs = this.particleRenderer?.simulation.script?.programs;
+            const errors = programs?.programs.flatMap(p => p.vm.diagnostic ? [`Object ${p.emitter.placementIndex}: ${p.vm.diagnostic.reason}`] : []) ?? [];
+            this.emitterScriptStatus.textContent = errors.length ? `Emitter stopped: ${errors.join('; ')}` : '';
+        }
         this.renderHelper.prepareToRender();
     }
 
@@ -1389,6 +1598,11 @@ export class SSSVRenderer implements Viewer.SceneGfx {
                 drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, marker.labelPosition, marker.label, 0, White, { align: "center", outline: 3 });
             }
         }
+        if (this.liveAnimalSpawns !== null && this.liveAnimalSpawns.activeMarkers.length) {
+            const ctx = getDebugOverlayCanvas2D();
+            for (const marker of this.liveAnimalSpawns.activeMarkers)
+                drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, marker.labelPosition, marker.label, 0, White, { align: "center", outline: 3 });
+        }
         if (this.animalMarkerMode !== "off" && this.animalSpawnPreviewEnabled && this.animalSpawnMarkers.length !== 0) {
             const ctx = getDebugOverlayCanvas2D();
             for (const marker of this.animalSpawnMarkers) {
@@ -1400,6 +1614,7 @@ export class SSSVRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.buttonInput?.destroy();
+        this.music?.destroy();
         this.renderHelper.destroy();
         this.renderData.destroy(device);
         this.hangingRenderer?.destroy(device);

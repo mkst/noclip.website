@@ -17,7 +17,39 @@ import { ParticleSimulation, particleProjectedHalfSize } from "../particles.js";
 
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));
 const map = Array.from({ length: MAP_X_POINTS * MAP_Z_POINTS }, () => ({ unk0: 0, unk1: 0, unk2: 0, unk3: 0, unk4: 0, unk5: 0, unk6: 0, unk7: 0 }));
-const config: BoulderEventConfig = { scriptBase: 163, region: { x0: 8, x1: 12, z0: 10, z1: 15, y0: 240, y1: 0 },
+const sourceRecords = [
+    "0003000010060000ffff",
+    "003d7f84002800320071",
+    "00067f7f000000000000",
+    "00100200000000000a00",
+    "00140007000000000000",
+    "00330014000000000000",
+    "00360400000000000000",
+    "000e00ad000000000000",
+    "00140000000000000000",
+    "0008ffff000000000000",
+    "00321001001400000000",
+    "00150000000000000000",
+    "00160000000000000000",
+    "00170089170324000000",
+    "00000000000000000000",
+    "00150000000000000000",
+    "00163f00080000000000",
+    "00170089041619000000",
+    "0002040006000000000c",
+    "00060001000000000000",
+    "003d7f88005000640910",
+    "000111007f8808000008",
+    "00080008000000000000",
+    "005b000a000000000000",
+    "0031001400c800000000",
+    "00130000000000000000",
+    "00090000000000000000",
+];
+const sourceBytes = Buffer.from([...Array(163).fill('00000000000000000000'), ...sourceRecords].join(''), 'hex');
+const bankBytes = Buffer.alloc(sourceBytes.length + 2); bankBytes.writeUInt16BE(bankBytes.length); sourceBytes.copy(bankBytes, 2);
+const sourceCommands = parseCommands(ArrayBufferSlice.fromView(bankBytes));
+const config: BoulderEventConfig = { commands: sourceCommands, scriptBase: 163, region: { x0: 8, x1: 12, z0: 10, z1: 15, y0: 240, y1: 0 },
     spawners: [{ placementIndex: 28, placement: { id: 64, x: 640, z: 768, y: 400, zRotation: 0, angle: 90, unkC: 41, scale: 6963, commandReferenceIdx: 164, commandsLength: 0, unk12: 0, unk15: 0 } }] };
 const definitions = new Map(LEVEL_EVENT_PARTICLE_IDS.map(id => [id, {
     raw: new Uint8Array(24), flags: id <= 4 ? 0x4E : 0xDE, defaultSize: 16, lifetime: id <= 4 ? 36 : 200,
@@ -59,7 +91,8 @@ test("falling boulders grow, accelerate and emit the final ID-4 setup, then prod
     let tick = 1;
     while (!sim.boulders.length) sim.advanceTo(tick++, 640, 768);
     sim.advanceTo(tick++, 0, 0);
-    equal(sim.boulders[0].scale, 1104); equal(sim.boulders[0].vy, -0x20000);
+    equal(sim.boulders[0].scale, 1024); equal(sim.boulders[0].vy, -0x20000);
+    sim.advanceTo(tick++, 0, 0); equal(sim.boulders[0].scale, 1104);
     equal(sim.particles[0].id, 4); equal(sim.particles[0].textureSize, 32);
     while (!sim.impactCount) sim.advanceTo(tick++, 0, 0);
     equal(sim.boulders.length, 0);

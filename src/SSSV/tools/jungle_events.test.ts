@@ -56,12 +56,17 @@ test("autonomous launchers run without camera entry, use random scale/lifetime, 
     for (let tick = 0; tick <= 600; tick++) {
         sim.advanceTo(tick, 0, 0);
         for (const b of sim.boulders) if (b.age === 0) {
-            ok(b.scale >= 1024 && b.scale <= 4050); ok(b.expiresAfter! >= 20 && b.expiresAfter! <= 39);
+            ok(b.scale >= 1024 && b.scale <= 4050); equal(b.expiresAfter, undefined);
             equal(b.pitch, 84); ok(b.vy > 69 * 65536);
             births.push({ tick, source: b.sourceIndex, heading: b.heading });
         }
         ok(sim.particles.every(p => p.id === 1));
-        ok(sim.boulders.every(b => b.age < b.expiresAfter!));
+        ok(sim.boulders.every(b => b.age <= 39));
+        for (const b of sim.boulders) if (b.age === 1) {
+            const vm = sim.commands.programs.get(b.commandId!)!.vm!;
+            const hold = Number(vm.waitReason?.match(/Delay \((\d+)/)?.[1]);
+            ok(hold >= 20 && hold <= 39);
+        }
     }
     ok(sim.spawnCount > 9); ok(sim.expirationCount > 6); equal(sim.impactCount, 0);
     for (let source = 0; source < selected.spawners.length; source++) {

@@ -1,7 +1,7 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { CommandTickBudget, CommandVM, commandMath } from "../command_vm.js";
+import { CommandTickBudget, CommandVM, commandMath, commandSuccess } from "../command_vm.js";
 import { CommandWorld } from "../command_world.js";
 import { parseCommands } from "../paths.js";
 
@@ -144,4 +144,59 @@ test('silent sound is nonblocking; positional sound still requires a live positi
     equal(plain.vm.status, 'stopped'); equal(plain.world.getEntity('owner')!.state, 7);
     const positional = fixture([record(0x26, 77, 0x5000, 0x7FFF, 0x100), stop]); positional.vm.step(0);
     equal(positional.vm.diagnostic!.kind, 'invalid-reference');
+});
+
+test('self program handoff replaces the bank/base and reloads a private delay without executing the old continuation', () => {
+    const { vm, world } = fixture([record(4, 3), record(6, 1), record(0x0E, 5), state(99), stop, record(6, 2), state(7), stop]);
+    vm.step(0); equal(vm.location.commandIndex, 1);
+    vm.step(1); equal(vm.location.scriptBase, 5); equal(vm.location.commandIndex, 5); equal(world.getEntity('owner')!.state, 1);
+    vm.step(2); equal(vm.status, 'waiting'); vm.step(3); equal(vm.status, 'stopped'); equal(world.getEntity('owner')!.state, 7);
+    const invalid = fixture([record(0x0E, 100)]); invalid.vm.step(0); equal(invalid.vm.diagnostic!.kind, 'invalid-data');
+});
+
+test('opcode 7 yields in place until the captured deferred condition fires', () => {
+    const { vm, world } = fixture([record(2, 0x0400, 0x0800, 0, 3), record(7), state(99), stop, state(7), stop]);
+    vm.step(0); equal(vm.location.commandIndex, 1); equal(vm.status, 'waiting');
+    vm.step(1); equal(vm.location.commandIndex, 1); equal(world.getEntity('owner')!.state, 1);
+    world.getEntity('owner')!.contactFlags = 8; vm.step(2);
+    equal(vm.status, 'stopped'); equal(world.getEntity('owner')!.state, 7);
+});
+
+test('foreign program assignment requires an explicit scheduler capability', () => {
+    const { vm, world } = fixture([record(0x14, 1), record(0x0E, 3), stop, state(7), stop]);
+    vm.step(0); equal(vm.status, 'unsupported'); equal(vm.location.commandIndex, 1);
+    equal(world.getEntity('linked')!.state, 1);
+});
+
+
+test('object path commands can wait, advance-and-yield, or continue as distinct source results', () => {
+    class PathWorld extends CommandWorld {
+        calls = 0;
+        executePathCommand() { return commandSuccess(++this.calls === 1 ? 'wait' as const : 'yield' as const); }
+    }
+    const world = new PathWorld([{ id: 'owner', typeId: 94 }]);
+    const vm = new CommandVM({ owner: 'owner', commands: bank([record(0x1D), state(7), stop]), scriptBase: 0 }, world);
+    vm.step(0); equal(vm.location.commandIndex, 0); equal(vm.status, 'waiting');
+    vm.step(1); equal(vm.location.commandIndex, 1); equal(vm.status, 'waiting'); equal(world.getEntity('owner')!.state, 1);
+    vm.step(2); equal(vm.status, 'stopped'); equal(world.getEntity('owner')!.state, 7);
+});
+
+test('reference writes use issuer-relative nested references and reject selected-target slot zero', () => {
+    const w = new CommandWorld([{ id: 'owner', typeId: 94, references: new Map([[7, 'helper']]) }, { id: 'helper', typeId: 64 }]);
+    const program = bank([record(0x14, 7), record(0x56, 7, 1, 0, 0), record(0x56, 0, 2, 0, 7), stop]);
+    const vm = new CommandVM({ owner: 'owner', commands: program, scriptBase: 0 }, w); vm.step(0);
+    equal(vm.status, 'stopped'); equal(w.getEntity('helper')!.references.get(1), 'owner'); equal(w.getEntity('owner')!.references.get(2), 'helper');
+    const invalid = new CommandVM({ owner: 'owner', commands: bank([record(0x56, 0, 0, 0, 7)]), scriptBase: 0 }, w);
+    invalid.step(0); equal(invalid.status, 'unsupported');
+});
+
+test('an unavailable animal slot retries the same instruction before continuing the issuer', () => {
+    class SpawnWorld extends CommandWorld {
+        attempts = 0;
+        spawnAnimal() { return commandSuccess(++this.attempts > 1); }
+    }
+    const w = new SpawnWorld([{ id: 'owner', typeId: 64 }]);
+    const vm = new CommandVM({ owner: 'owner', commands: bank([record(0x60), state(7), stop]), scriptBase: 0 }, w);
+    vm.step(0); equal(vm.location.commandIndex, 0); equal(w.getEntity('owner')!.state, 1);
+    vm.step(1); equal(vm.status, 'stopped'); equal(w.getEntity('owner')!.state, 7);
 });

@@ -1,3 +1,12 @@
+import { FloorButtonVisuals } from '../floor_buttons.js';
+import { readLagoonMachine, LagoonMachineRuntime, MACHINE_ARMS, MACHINE_PADS, MACHINE_LEVERS } from '../lagoon_machine.js';
+import { LagoonMachineVisuals } from '../lagoon_machine_renderer.js';
+import { readSnowPlatforms, SnowPlatformRuntime } from "../snow_platforms.js";
+import { SnowPlatformVisuals } from "../snow_platform_renderer.js";
+import { readLiveAnimalSpawns, LiveAnimalSpawnRuntime } from "../live_animal_spawns.js";
+import { LiveAnimalSpawnVisuals } from "../live_animal_renderer.js";
+import { EmitterCommandRuntime } from "../emitter_commands.js";
+import { ObjectCommandRuntime, readObjectPrograms } from "../object_commands.js";
 import { readElevator } from "../elevator.js";
 import { buildElevatorVisuals } from "../elevator_renderer.js";
 import { buildArrivalVisuals, EntranceArrival, findArrivalEntrance } from "../arrival.js";
@@ -155,9 +164,12 @@ function verifyLevel(levelId: string): void {
             const data = read(`data/SSSV/${particleDefinitionFile(id)}`);
             return [id, parseParticleDefinition(data)] as const;
         }));
-        const simulation = new ScriptParticleSimulation(emitterAnalysis.emitters, definitions, map, dat, emitterAnalysis.provenance);
+        const emitterPrograms = new EmitterCommandRuntime(emitterAnalysis.emitters, commands, player);
+        assert(JSON.stringify(emitterPrograms.emitters.map(e => e.initial)) === JSON.stringify(emitterAnalysis.emitters.map(e => e.initial)), `${entry.id}: emitter VM configuration mismatch`);
+        const simulation = new ScriptParticleSimulation(emitterPrograms.emitters, definitions, map, dat, emitterAnalysis.provenance, emitterPrograms);
         for (const tick of [0, 1, 2, 4, 38, 120, 240, 1000000, 7, 120]) {
             simulation.advanceTo(tick);
+            assert(emitterPrograms.programs.every(p => p.vm.diagnostic === null), `${entry.id}: emitter program fault`);
             assert(simulation.particles.length <= 255, `${entry.id}: excessive script particles`);
             for (const p of simulation.particles) {
                 assert(Number.isFinite(p.x + p.y + p.z + p.size), `${entry.id}: invalid script particle`);
@@ -268,6 +280,11 @@ function verifyLevel(levelId: string): void {
     for (const marker of spawnMarkers)
         assert(marker.hasModel === modeledAnimalPlacements.has(marker.placementIndex + animals.length), `${entry.id}: incorrect spawn marker coverage`);
     const animalBuilds = allAnimalBuilds.filter(build => build.placementIndex < animals.length);
+    for (const build of allAnimalBuilds) {
+        assert((build.flame !== null) === (build.recipe.species === "FIRE_FOX"), `${entry.id}: incorrect animated flame eligibility`);
+        if (build.flame !== null)
+            assert(build.flame.targets.length > 0 && build.flame.vertexCount === build.flame.targets.length, `${entry.id}: incomplete animated flame mesh`);
+    }
     const spawnBuilds = allAnimalBuilds.filter(build => build.placementIndex >= animals.length);
     for (const build of spawnBuilds) {
         build.spawnCommandIndex = animalSpawns[build.placementIndex - animals.length].commandIndex;
@@ -517,7 +534,9 @@ function verifyLevel(levelId: string): void {
     for (const build of rats) {
         const king = build.recipe.species === "KING_RAT";
         assert(build.partMatrices.length === (king ? 8 : 7) && build.partMatrices.every(p => p.triangles > 0), `${entry.id}: incomplete RAT/KING_RAT`);
-        assert(build.textureIds.length === 0, `${entry.id}: RAT/KING_RAT inherited a spurious texture`);
+        assert(build.textureIds.length === 1 && build.textureIds[0] === 563, `${entry.id}: RAT/KING_RAT glow texture`);
+        const glows = build.drawCalls.filter(draw => draw.animalEyeGlow);
+        assert(glows.length === 2 && glows.every(draw => draw.translucent && draw.billboard && draw.projectedObjectSprite?.size === (king ? 12 : 6)), `${entry.id}: RAT/KING_RAT eye glows`);
         const body = assertExists(build.partMatrices.find(p => p.name === "body"));
         assert(Math.abs(body.matrix[13] - (build.resolvedY + 365 * (king ? 2 : 1) / 32)) < 1e-4, `${entry.id}: RAT/KING_RAT outer scale or height is incorrect`);
         let offset = 0;
@@ -541,16 +560,24 @@ function verifyLevel(levelId: string): void {
         const husky = tail.simulation.kind === "husky" || tail.simulation.kind === "crazy-husky";
         const links = elephant ? 4 : husky ? 3 : 5, vertices = elephant ? 32 : husky ? 18 : 40;
         assert(tail.targets.length === vertices && tail.vertexCount === vertices, `${entry.id}: incomplete tail mesh`);
-        const draws = build.drawCalls.slice(-links);
+        const draws = build.drawCalls.filter(draw => !draw.animalEyeGlow).slice(-links);
         assert(draws.length === links && draws.every(draw => draw.indexCount === (husky ? 24 : 36) && draw.layer === SSSVLayer.Animals), `${entry.id}: incomplete tail draw calls`);
         assert(draws.every(draw => draw.textureIndices.length === 0 && (draw.SP_GeometryMode & RSP_Geometry.G_LIGHTING) !== 0), `${entry.id}: tail inherited an incorrect material`);
         assert(draws.every((draw, link) => draw.DP_PrimColor.every((v, i) => Math.abs(v - (elephant ? [148 / 255, 148 / 255, 148 / 255, 1] : husky ? [(tail.simulation.kind === "crazy-husky" ? [128, 183, 73] : [190, 212, 255])[link] / 255, 1, 1, 1] : [1, 0.6, 0.6, 1])[i]) < 1e-6)), `${entry.id}: tail lost source primitive color`);
     }
-    const bears = animalBuilds.filter(build => build.recipe.species === "BEAR");
-    assert(bears.filter(build => !build.isPlayer).length === (["THE_ENGINE_ROOM", "FAT_BEAR_MOUNTAIN"].includes(entry.id) ? 1 : 0), `${entry.id}: missing BEAR placement`);
+    const bears = animalBuilds.filter(build => build.recipe.species === "BEAR" || build.recipe.species === "MYSTERY_BEAR");
+    assert(bears.filter(build => !build.isPlayer && build.placement.id === 22).length === (["THE_ENGINE_ROOM", "FAT_BEAR_MOUNTAIN"].includes(entry.id) ? 1 : 0), `${entry.id}: missing BEAR placement`);
+    assert(bears.filter(build => !build.isPlayer && build.placement.id === 24).length === (entry.id === "THE_ENGINE_ROOM" ? 1 : 0), `${entry.id}: missing MYSTERY_BEAR placement`);
     for (const build of bears) {
-        assert(build.partMatrices.length === 8 && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete BEAR`);
-        const textures = build.textureIds.map(id => sharedOutput.textureCache.textures[id]);
+        assert(build.partMatrices.length === (build.placement.id === 24 ? 7 : 8) && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete BEAR`);
+        assert((build.mysteryBear !== null) === (build.placement.id === 24), `${entry.id}: incorrect Mystery Bear animation eligibility`);
+        if (build.mysteryBear !== null) {
+            const motion = build.mysteryBear;
+            assert(motion.targets.length === motion.vertexCount && motion.vertexCount > 0, `${entry.id}: incomplete Mystery Bear animated mesh`);
+            assert(motion.balls.length === 3 && motion.balls.every((ball, i) => ball.textureIndices[0] === BIOME_REGULAR_TEXTURE_ID_BASE + 3 + i && ball.projectedObjectSprite?.size === 612 * 3 / 256 && ball.layer === SSSVLayer.Animals), `${entry.id}: incorrect Mystery Bear juggling billboards`);
+            assert(motion.spotlights?.draws.length === 2 && motion.spotlights.draws.every(draw => draw.textureIndices[0] === 601 && draw.layer === SSSVLayer.Animals && draw.translucent), `${entry.id}: missing Mystery Bear spotlights`);
+        }
+        const textures = build.textureIds.filter(id => !build.mysteryBear || ![...build.mysteryBear.balls, ...build.mysteryBear.spotlights!.draws].some(draw => draw.textureIndices.includes(id))).map(id => sharedOutput.textureCache.textures[id]);
         assert(textures.every(t => t.dramAddr >= 0x010025A0 && t.dramAddr < 0x01002C20 && t.dramPalAddr === 0x01002C40), `${entry.id}: BEAR acquired a non-eye texture`);
         for (const part of build.partMatrices) {
             const mirrored = part.name === "front right leg" || part.name === "rear right leg";
@@ -657,6 +684,7 @@ function verifyLevel(levelId: string): void {
         assert(visuals.drawCalls.every(draw => !draw.visible), `${entry.id}: scripted events are not disabled by default`);
         visuals.setEnabled(true);
         for (let tick = 0; tick <= 300; tick++) visuals.update(tick, 3400, 5000);
+        assert(simulation.commands.diagnostics.length === 0, `${entry.id}: boulder VM fault`);
         assert(simulation.spawnCount > 10 && simulation.impactCount > 5, `${entry.id}: boulder event did not cycle`);
         if (entry.id === "JUNGLE_DOLDRUMS")
             assert(simulation.expirationCount > 3, `${entry.id}: timed Jungle boulders did not expire independently of collision`);
@@ -697,6 +725,94 @@ function verifyLevel(levelId: string): void {
         runtime.setEnabled(false); elevator.update(true);
         assert(elevator.drawCalls.every(c => !c.visible) && runtime.world.objects.size === 1, `${entry.id}: elevator disable`);
         drawCalls.push(...elevator.drawCalls);
+    }
+    const objectPrograms = readObjectPrograms(objects, commands, objectTable);
+    const expectedObjectPrograms: Record<string, number> = { PUNCHUP_PYRAMID: 18, SOMETHING_FISHY: 2, EVOS_ESCAPE: 1, BIG_CELEBRATION_PARADE: 1, CREDITS: 1, SWAMP_OF_ETERNAL_STENCH: 1 };
+    assert(objectPrograms.length === (expectedObjectPrograms[entry.id] ?? 0), `${entry.id}: unexpected object program admission`);
+    if (objectPrograms.length) {
+        const counts = [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length];
+        const runtime = new ObjectCommandRuntime(objectPrograms, commands, objectTable, drawCalls);
+        runtime.advanceTo(0);
+        for (let tick = 1; tick <= 300; tick++) runtime.advanceTo(tick);
+        assert(runtime.entries.every(e => e.vm.diagnostic === null && e.calls.length > 0), `${entry.id}: object program/binding fault`);
+        for (const e of runtime.entries) for (const call of e.calls) {
+            if (e.config.kind === "material") assert(call.commandTextureFrame !== null && call.commandTextureFrame >= 0 && call.commandTextureFrame < 4, `${entry.id}: invalid command texture frame`);
+            else assert(call.objectMotion === null && call.objectRotation?.rotation.yPerTick === 0 && call.objectRotation.rotation.zPerTick === 0, `${entry.id}: duplicate animation writer`);
+        }
+        runtime.reset();
+        assert(counts.every((n, i) => n === [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length][i]), `${entry.id}: object program resource growth`);
+    }
+    const floorButtons = new FloorButtonVisuals(drawCalls);
+    floorButtons.update(true);
+    assert(floorButtons.calls.length === objects.filter(p => p.id === 42).length * 3, `${entry.id}: floor-button parts`);
+    assert(floorButtons.calls.filter(c => c.floorButton!.part === 'glow').every(c => !c.visible), `${entry.id}: inactive floor glow`);
+    const machineConfig = readLagoonMachine(objects, commands, objectTable, links, findPayload(payloads, LevelPayloadType.Rng), player);
+    assert((machineConfig !== null) === (entry.id === 'HONEYMOON_LAGOON'), `${entry.id}: machine admission`);
+    if (machineConfig) {
+        const runtime = new LagoonMachineRuntime(machineConfig), visual = new LagoonMachineVisuals(runtime, drawCalls, fences);
+        const counts = [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length, drawCalls.length];
+        const initialFences = fences.map(f => f.enabled);
+        runtime.setEnabled(true); runtime.advanceTo(0); runtime.advanceTo(40);
+        for (const index of MACHINE_PADS) assert(runtime.activate(index), `${entry.id}: pad input`);
+        for (const index of MACHINE_LEVERS) assert(runtime.activate(index), `${entry.id}: lever input`);
+        runtime.advanceTo(650); visual.update(true);
+        floorButtons.update(true, i => runtime.world.getEntity(`object:${i}`)?.state ?? null);
+        assert(floorButtons.calls.filter(c => c.floorButton!.part === 'glow').length === 4 && floorButtons.calls.filter(c => c.floorButton!.part === 'glow').every(c => c.visible), `${entry.id}: active floor glow`);
+        assert(floorButtons.calls.filter(c => c.floorButton!.part === 'cap').every(c => c.DP_PrimColor[0] === 1), `${entry.id}: active floor cap`);
+        assert([...runtime.world.programs.values()].every(vm => vm.diagnostic === null), `${entry.id}: machine fault`);
+        assert(runtime.world.globals[0] === 4 && runtime.world.globals[1] === 4, `${entry.id}: machine inputs lost`);
+        assert(MACHINE_ARMS.every(i => runtime.world.programs.get(`object:${i}`)!.status === 'stopped'), `${entry.id}: arm did not stop`);
+        assert(fences.filter(f => [13, 14].includes(f.sourceIndex)).length === 2 && fences.filter(f => [13, 14].includes(f.sourceIndex)).every(f => !f.enabled), `${entry.id}: pad gate not unlocked`);
+        const arms = drawCalls.filter(c => (MACHINE_ARMS as readonly number[]).includes(c.objectPlacementIndex!));
+        assert(new Set(arms.map(c => c.objectPlacementIndex)).size === 4 && arms.every(c => c.visible && c.modelMatrix !== null && [...c.modelMatrix, ...c.center].every(Number.isFinite)), `${entry.id}: arm transforms`);
+        visual.update(false); assert(arms.every(c => !c.visible), `${entry.id}: machine object visibility`);
+        runtime.setEnabled(false); visual.update(true);
+        assert(fences.every((f, i) => f.enabled === initialFences[i]), `${entry.id}: fence state not restored`);
+        floorButtons.update(true);
+        assert(floorButtons.calls.filter(c => c.floorButton!.part === 'glow').every(c => !c.visible), `${entry.id}: floor glow did not reset`);
+        for (let i = 0; i < 3; i++) { runtime.setEnabled(true); runtime.reset(); visual.update(true); runtime.setEnabled(false); visual.update(true); }
+        assert(counts.every((n, i) => n === [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length, drawCalls.length][i]), `${entry.id}: machine resource growth`);
+    }
+    const snowConfig = readSnowPlatforms(objects, commands, objectTable, paths, links);
+    assert((snowConfig !== null) === (entry.id === "SNOW_JOKE"), `${entry.id}: platform VM admission`);
+    if (snowConfig) {
+        const runtime = new SnowPlatformRuntime(snowConfig), visual = new SnowPlatformVisuals(runtime, drawCalls);
+        const counts = [sharedOutput.vertices.length, sharedOutput.indices.length];
+        runtime.setEnabled(true); runtime.advanceTo(0);
+        for (let tick = 1; tick <= 500; tick++) { if (tick === 200) runtime.activateSwitch(5); runtime.advanceTo(tick); visual.update(true); }
+        assert([...runtime.world.programs.values()].every(vm => vm.diagnostic === null) && runtime.world.objects.size === 6, `${entry.id}: platform VM execution`);
+        assert(new Set(drawCalls.filter(c => c.objectRotation && snowConfig.indices.includes(c.objectPlacementIndex!)).map(c => c.objectPlacementIndex)).size === 3, `${entry.id}: missing platform bindings`);
+        assert(drawCalls.filter(c => c.objectPlacementIndex === 3).every(c => !c.visible), `${entry.id}: invisible platform drawn without preview`);
+        visual.revealInvisible = true; visual.update(true);
+        assert(drawCalls.filter(c => c.objectPlacementIndex === 3 && c.objectRotation).some(c => c.visible), `${entry.id}: invisible platform reveal failed`);
+        assert(runtime.activateSwitch(4), `${entry.id}: visibility switch unavailable`);
+        for (let n = 0; n < 21; n++) runtime.step();
+        visual.update(true);
+        assert(runtime.world.objects.get('object:3')!.material === 157 && drawCalls.some(c => c.objectPlacementIndex === 3 && c.visible && c.textureIndices[0] === 29), `${entry.id}: live visibility material`);
+        assert([1, 2].every(slot => drawCalls.some(c => c.fanAnimation?.slot === slot && c.animationTextureIndices !== null)), `${entry.id}: missing fan surface`);
+        assert(drawCalls.filter(c => c.fanAnimation).every(c => c.commandTextureFrame !== null && c.commandTextureFrame >= 0 && c.commandTextureFrame < c.animationTextureIndices!.length), `${entry.id}: fan frame binding`);
+        runtime.setEnabled(false); visual.update(true);
+        assert(drawCalls.filter(c => c.objectPathMotion).length === 3, `${entry.id}: platform preview restoration`);
+        assert(counts[0] === sharedOutput.vertices.length && counts[1] === sharedOutput.indices.length, `${entry.id}: platform resource growth`);
+    }
+    const liveConfig = readLiveAnimalSpawns(objects, commands, map, player);
+    assert((liveConfig !== null) === (entry.id === "GIVE_A_DOG_A_BONUS"), `${entry.id}: live spawn admission`);
+    if (liveConfig) {
+        const runtime = new LiveAnimalSpawnRuntime(liveConfig), visual = new LiveAnimalSpawnVisuals(runtime, sharedOutput, allAnimalBuilds);
+        drawCalls.push(...visual.drawCalls);
+        const counts = [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length];
+        assert(visual.drawCalls.every(c => !c.visible), `${entry.id}: live spawns enabled by default`);
+        runtime.setEnabled(true); runtime.setStage("foxes"); runtime.step(); visual.update(true, "auto");
+        assert(runtime.world.animals.size === 3 && visual.drawCalls.some(c => c.visible), `${entry.id}: live fox spawn`);
+        runtime.setStage("dogs"); runtime.step(); runtime.continueSequence(); runtime.step();
+        for (let tick = 0; tick < 120; tick++) runtime.step();
+        runtime.continueSequence(); runtime.setStage("laterDogs"); runtime.step(); visual.update(true, "all");
+        assert(runtime.world.animals.size === 11 && visual.activeMarkers.length === 11, `${entry.id}: complete live spawn waves`);
+        assert([...runtime.world.programs.values()].every(vm => !vm.diagnostic), `${entry.id}: live spawn VM fault`);
+        assert(visual.drawCalls.every(c => c.center.every(Number.isFinite) && c.modelMatrix!.every(Number.isFinite)), `${entry.id}: live spawn transform`);
+        runtime.reset(); visual.update(true, "all");
+        assert(visual.drawCalls.every(c => !c.visible), `${entry.id}: live spawn reset retained draw calls`);
+        assert(counts.every((n, i) => n === [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length][i]), `${entry.id}: live spawn resource growth`);
     }
     applyStartupLighting(drawCalls, readStartupLighting(commands, objects, animals));
     const referencedIndices = new Set<number>();

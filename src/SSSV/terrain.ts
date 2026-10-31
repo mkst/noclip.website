@@ -1,3 +1,4 @@
+import type { FloorButtonPart } from './floor_buttons.js';
 import * as RDP from "../Common/N64/RDP.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DrawCall, RSP_Geometry, RSPSharedOutput, Vertex } from "../BanjoKazooie/f3dex.js";
@@ -15,6 +16,7 @@ import type { AnimalEyeAnimation } from "./animal_eyes.js";
 
 export const COMBINE_TEXTURED = RDP.decodeCombineParams(0x127FFF, 0xFFFFF238);
 export const COMBINE_UNTEXTURED = RDP.decodeCombineParams(0xFFFFFF, 0xFFFE793C);
+const COMBINE_TRANSLUCENT_SHADE = RDP.decodeCombineParams(0xFFFFFF, 0xFFFE7838);
 export const COMBINE_PRIM_TEXTURED: RDP.CombineParams = {
     c0: { a: RDP.CCMUX.PRIMITIVE, b: RDP.CCMUX.ADD_ZERO, c: RDP.CCMUX.TEXEL0, d: RDP.CCMUX.ADD_ZERO },
     a0: { a: RDP.ACMUX.PRIMITIVE, b: RDP.ACMUX.ZERO, c: RDP.ACMUX.TEXEL0, d: RDP.ACMUX.ZERO },
@@ -77,6 +79,8 @@ export enum SSSVLayer {
     AnimalSpawnMarkers = 9,
     ScriptedEvents = 10,
     ObjectMarkers = 11,
+    LiveAnimals = 12,
+    LiveAnimalMarkers = 13,
 }
 
 export class SSSVLight {
@@ -109,12 +113,14 @@ export class SSSVDrawCall extends DrawCall {
     public animalMarkerHasModel = false;
     public objectPlacementIndex: number | null = null;
     public objectStateColor = false;
+    public floorButton: FloorButtonPart | null = null;
     public leverHandle: LeverHandleTransform | null = null;
     public teleporter: TeleporterVisualState | null = null;
     public switchBall: { state: number; size: number } | null = null;
     public leverLight: { size: number } | null = null;
     public projectedObjectSprite: { size: number } | null = null;
     public animalEyeAnimation: AnimalEyeAnimation | null = null;
+    public animalEyeGlow = false;
     public layer = SSSVLayer.Terrain;
     public visible = true;
     public translucent = false;
@@ -139,8 +145,10 @@ export class SSSVDrawCall extends DrawCall {
     public centerCount = 0;
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
+    public fanAnimation: { slot: number; kind: 8 | 9 } | null = null;
     public scrollStepS = 0;
     public scrollStepT = 0;
+    public commandTextureFrame: number | null = null;
     public animationTextureIndices: number[] | null = null;
     public animationTextureIndices1: number[] | null = null;
     public animationTextureFrame1 = 0;
@@ -268,6 +276,11 @@ function usesMainTextureScroll(face: GeometryFace): boolean {
     return face.variant !== 0 && ((face.flags & 0x0020) !== 0 || (face.texture <= 40 && (face.flags & (0x0008 | 0x0040 | 0x2000)) === 0));
 }
 
+function isShadeOnlyTranslucent(face: GeometryFace): boolean {
+    // func_80346BB4_758264 uses texture 0 as shade-only in this branch only.
+    return face.texture === 0 && (face.flags & FLAG_TRANSLUCENT) !== 0 && (face.flags & (0x0010 | 0x0200 | 0x0100)) === 0;
+}
+
 function faceKey(face: GeometryFace, hasTexture: boolean): string {
     const tex = hasTexture ? face.texture : -1;
     const variant = hasTexture ? face.variant : -1;
@@ -278,6 +291,7 @@ function faceKey(face: GeometryFace, hasTexture: boolean): string {
         isDecal(face.flags) ? 1 : 0,
         isInterpenetrating(face.flags) ? 1 : 0,
         face.lit ? 1 : 0,
+        isShadeOnlyTranslucent(face) ? 1 : 0,
         tex,
         variant,
     ].join(":");
@@ -285,7 +299,8 @@ function faceKey(face: GeometryFace, hasTexture: boolean): string {
 
 function makeDrawCall(face: GeometryFace, sharedOutput: RSPSharedOutput, light: SSSVLight, fogNear: number, fogFar: number, fogColor: Color, scrollingTable: LevelScrollStep[] | null, waterPrimColor: [number, number, number, number]): SSSVDrawCall {
     const drawCall = new SSSVDrawCall();
-    const hasTexture = sharedOutput.textureCache.textures[face.texture] !== undefined;
+    const shadeOnly = isShadeOnlyTranslucent(face);
+    const hasTexture = !shadeOnly && sharedOutput.textureCache.textures[face.texture] !== undefined;
     const translucent = isTranslucent(face.flags);
     const alphaCompare = isAlphaCompare(face.flags);
     const decal = isDecal(face.flags);
@@ -298,6 +313,8 @@ function makeDrawCall(face: GeometryFace, sharedOutput: RSPSharedOutput, light: 
         drawCall.SP_GeometryMode |= RSP_Geometry.G_CULL_BACK;
     if (lit)
         drawCall.SP_GeometryMode |= RSP_Geometry.G_LIGHTING;
+    if (shadeOnly)
+        drawCall.SP_GeometryMode &= ~RSP_Geometry.G_FOG;
 
     drawCall.SP_TextureState.set(hasTexture, 0, 0, 32, 32);
     drawCall.DP_OtherModeH = DP_OTHERMODE_H;
@@ -312,9 +329,12 @@ function makeDrawCall(face: GeometryFace, sharedOutput: RSPSharedOutput, light: 
         drawCall.DP_OtherModeL = drawCall.translucent ? RENDER_TRANSLUCENT : RENDER_OPAQUE;
 
     drawCall.DP_Combine = hasTexture ? COMBINE_TEXTURED : COMBINE_UNTEXTURED;
+    if (shadeOnly)
+        drawCall.DP_Combine = COMBINE_TRANSLUCENT_SHADE;
     if (hasTexture && drawCall.translucent && (face.flags & FLAG_TRANSLUCENT) !== 0 && face.texture < 32)
         drawCall.DP_Combine = COMBINE_TRANSLUCENT_VERTEX_ALPHA;
     drawCall.textureIndices = hasTexture ? [face.texture] : [];
+    if (face.texture === 41) drawCall.fanAnimation = { slot: face.variant, kind: 8 };
     if ((face.flags & 0x0210) !== 0 && sharedOutput.textureCache.textures[WATER_TEXTURE_ID] !== undefined) {
         const waterTexture = sharedOutput.textureCache.textures[WATER_TEXTURE_ID];
         drawCall.textureIndices = [WATER_TEXTURE_ID];
@@ -333,6 +353,7 @@ function makeDrawCall(face: GeometryFace, sharedOutput: RSPSharedOutput, light: 
         drawCall.textureIndices = [frameIds[0]];
         drawCall.animationTextureIndices = frameIds;
         drawCall.animationFrameRate = 15;
+        drawCall.fanAnimation = { slot: face.variant, kind: face.texture === 42 ? 9 : 8 };
         drawCall.SP_TextureState.set(true, 0, 0, 32, 32);
         drawCall.DP_Combine = COMBINE_TEXTURED;
         drawCall.translucent = true;
@@ -356,7 +377,7 @@ function makeDrawCall(face: GeometryFace, sharedOutput: RSPSharedOutput, light: 
 
 export function buildTerrain(sharedOutput: RSPSharedOutput, geometry: LevelGeometry, dat: LevelDat, scrollingTable: LevelScrollStep[] | null = null): SSSVDrawCall[] {
     const faces = geometry.faces.slice();
-    const hasTexture = (face: GeometryFace): boolean => sharedOutput.textureCache.textures[face.texture] !== undefined;
+    const hasTexture = (face: GeometryFace): boolean => !isShadeOnlyTranslucent(face) && sharedOutput.textureCache.textures[face.texture] !== undefined;
     faces.sort((a, b) => faceKey(a, hasTexture(a)) < faceKey(b, hasTexture(b)) ? -1 : 1);
 
     const [fogNear, fogFar] = makeFogNearFar(dat);

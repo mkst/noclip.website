@@ -1,3 +1,4 @@
+import type { EmitterCommandRuntime } from "./emitter_commands.js";
 import { sin256 as sin, cos256 as cos } from "./degree_math.js";
 import { MAP_Z_POINTS } from "./level.js";
 import type { LevelDat, LevelMapEntry } from "./level.js";
@@ -37,7 +38,7 @@ export interface ScriptParticle extends ParticleSprite {
     aboveUpper: boolean;
 }
 
-class ParticleRandom {
+export class ParticleRandom {
     private randu: number;
     private lfsr: number;
     constructor(private state: number) { this.state = state || 1; this.randu = this.state; this.lfsr = (this.state & 0xFFFF) || 1; }
@@ -49,6 +50,11 @@ class ParticleRandom {
         const old = this.lfsr;
         this.lfsr = ((old << 1) ^ (((old >>> 15) ^ (old >>> 13) ^ (old >>> 4)) & 1)) & 0xFFFF;
         return this.lfsr & (n - 1);
+    }
+    public clone(): ParticleRandom {
+        const copy = new ParticleRandom(this.state);
+        copy.randu = this.randu; copy.lfsr = this.lfsr;
+        return copy;
     }
     public spread(n: number): number {
         if (n === 0) return 0;
@@ -99,7 +105,7 @@ export class ScriptParticleSimulation {
     private waterEnvironment: number;
     private waterPrimaryRgb: number[];
 
-    constructor(public readonly emitters: readonly PersistentEmitter[], public readonly definitions: ReadonlyMap<number, ParticleDefinition>, private map: readonly LevelMapEntry[], dat: Pick<LevelDat, "waterPrimColor" | "waterEnvColor">, public readonly provenance: readonly EmitterProvenance[] = []) {
+    constructor(public readonly emitters: readonly PersistentEmitter[], public readonly definitions: ReadonlyMap<number, ParticleDefinition>, private map: readonly LevelMapEntry[], dat: Pick<LevelDat, "waterPrimColor" | "waterEnvColor">, public readonly provenance: readonly EmitterProvenance[] = [], public readonly programs: EmitterCommandRuntime | null = null) {
         for (const [id, flags, lifetime, frameTicks, maxFrame, group] of [[19, 0, 90, 20, 1, 6], [24, 0x9C, 200, 1, 0, 6], [25, 0x56, 38, 10, 4, 4], [26, 0x56, 22, 6, 4, 4], [37, 0x5C, 200, 1, 0, 4], [58, 2, 12, 3, 4, 6]]) {
             const d = assertExists(definitions.get(id));
             assert(d.flags === flags && d.lifetime === lifetime && d.motionTable === 0 && d.frameTicks === frameTicks && d.maxFrame === maxFrame && d.renderGroup === group, `Unsupported particle definition ${id}`);
@@ -111,6 +117,7 @@ export class ScriptParticleSimulation {
 
     public advanceTo(tick: number): void {
         tick = Math.max(0, Math.floor(tick));
+        this.programs?.advanceTo(tick);
         if (tick === this.lastTick) return;
         this.lastTick = tick;
         this.particles.length = 0;
@@ -122,57 +129,61 @@ export class ScriptParticleSimulation {
                 for (let ordinal = 0; ordinal < count; ordinal++) {
                     const seed = (Math.imul(emitter.placementIndex + 1, 0x9E3779B1) ^ Math.imul(birth, 0x85EBCA6B) ^ Math.imul(ordinal + 1, 0xC2B2AE35)) >>> 0;
                     const { particle: p, random } = spawnScriptParticle(emitter, emitterIndex, this.definitions, this.map, seed);
-                    for (let step = birth; step <= tick && p.remaining !== 0; step++) {
-                        const d = assertExists(this.definitions.get(p.id)), flags = d.flags;
-                        p.remaining--;
-                        if ((flags & 2) && p.remaining % d.frameTicks === d.frameTicks - 1) p.frame = Math.min(d.maxFrame, p.frame + 1);
-                        if (flags & 0x10) {
-                            if ((flags & 8) && p.vy > -12 * 65536) p.vy -= 25000;
-                            if (flags & 0x40) {
-                                if (p.vx > 0) p.vx -= 5536; if (p.vx < 0) p.vx += 5536;
-                                if (p.vz > 0) p.vz -= 5536; if (p.vz < 0) p.vz += 5536;
-                            }
-                            const s = sampleParticleSurfaces(this.map, p.x / 65536, p.z / 65536);
-                            if (s === null) break;
-                            if (Math.floor(p.y / 65536) < s.ground || Math.floor(p.y / 65536) < s.water || (p.aboveUpper && p.y / 65536 < s.upper)) {
-                                if (flags & 0x80) p.remaining = 0;
-                                else {
-                                    p.vy = Math.trunc(p.vy / -2); p.size >>= 1;
-                                    if (p.vy < 32000) p.remaining = 0;
-                                }
-                            }
-                            if (flags & 4) { p.x += p.vx; p.z += p.vz; p.y += p.vy; }
-                        }
-                        const drawSize = p.size;
-                        p.lodFraction = Math.floor(256 / d.frameTicks) * (d.frameTicks - p.remaining % d.frameTicks - 1);
-                        if (p.id === 25 || p.id === 26) {
-                            p.texture0 = SCRIPT_PARTICLE_TEXTURE_BASE + p.frame; p.texture1 = p.texture0 + 1;
-                            if (p.size < p.targetSize) p.size += random.mask(8) + 3;
-                        } else if (p.id === 24) {
-                            p.texture0 = p.texture1 = SCRIPT_PARTICLE_TEXTURE_BASE + 6;
-                            const s = sampleParticleSurfaces(this.map, p.x / 65536, p.z / 65536);
-                            if (s === null) break;
-                            const impact = Math.floor(p.y / 65536) + 18 < s.ground || (p.aboveUpper && p.y / 65536 < s.upper);
-                            if (Math.floor(p.y / 65536) < s.water) {
-                                p.y = s.water * 65536; p.remaining = 0;
-                                this.addRipple(p, tick - step);
-                            }
-                            else if (impact) {
-                                p.remaining = 0;
-                                this.addImpact(p, s.ground + 8, tick - step);
-                            }
-                        } else if (p.id === 37) {
-                            p.texture0 = p.texture1 = SCRIPT_PARTICLE_TEXTURE_BASE + 15;
-                        } else {
-                            p.texture0 = SCRIPT_PARTICLE_TEXTURE_BASE + 7 + p.frame; p.texture1 = p.texture0 + 1;
-                        }
-                        if (step === tick) this.particles.push({ ...p, size: drawSize });
-                    }
+                    this.sampleBirth({ particle: p, random }, birth, tick);
                 }
             });
         }
         // Source slots are overwritten by later births; retain recent particles under saturation.
         if (this.particles.length > 255) this.particles.splice(0, this.particles.length - 255);
+    }
+
+    public sampleBirth({ particle: p, random }: ReturnType<typeof spawnScriptParticle>, birth: number, tick: number): void {
+        for (let step = birth; step <= tick && p.remaining !== 0; step++) {
+            const d = assertExists(this.definitions.get(p.id)), flags = d.flags;
+            p.remaining--;
+            if ((flags & 2) && p.remaining % d.frameTicks === d.frameTicks - 1) p.frame = Math.min(d.maxFrame, p.frame + 1);
+            if (flags & 0x10) {
+                if ((flags & 8) && p.vy > -12 * 65536) p.vy -= 25000;
+                if (flags & 0x40) {
+                    if (p.vx > 0) p.vx -= 5536; if (p.vx < 0) p.vx += 5536;
+                    if (p.vz > 0) p.vz -= 5536; if (p.vz < 0) p.vz += 5536;
+                }
+                const s = sampleParticleSurfaces(this.map, p.x / 65536, p.z / 65536);
+                if (s === null) break;
+                if (Math.floor(p.y / 65536) < s.ground || Math.floor(p.y / 65536) < s.water || (p.aboveUpper && p.y / 65536 < s.upper)) {
+                    if (flags & 0x80) p.remaining = 0;
+                    else {
+                        p.vy = Math.trunc(p.vy / -2); p.size >>= 1;
+                        if (p.vy < 32000) p.remaining = 0;
+                    }
+                }
+                if (flags & 4) { p.x += p.vx; p.z += p.vz; p.y += p.vy; }
+            }
+            const drawSize = p.size;
+            p.lodFraction = Math.floor(256 / d.frameTicks) * (d.frameTicks - p.remaining % d.frameTicks - 1);
+            if (p.id === 25 || p.id === 26) {
+                p.texture0 = SCRIPT_PARTICLE_TEXTURE_BASE + p.frame; p.texture1 = p.texture0 + 1;
+                if (p.size < p.targetSize) p.size += random.mask(8) + 3;
+            } else if (p.id === 24) {
+                p.texture0 = p.texture1 = SCRIPT_PARTICLE_TEXTURE_BASE + 6;
+                const s = sampleParticleSurfaces(this.map, p.x / 65536, p.z / 65536);
+                if (s === null) break;
+                const impact = Math.floor(p.y / 65536) + 18 < s.ground || (p.aboveUpper && p.y / 65536 < s.upper);
+                if (Math.floor(p.y / 65536) < s.water) {
+                    p.y = s.water * 65536; p.remaining = 0;
+                    this.addRipple(p, tick - step);
+                }
+                else if (impact) {
+                    p.remaining = 0;
+                    this.addImpact(p, s.ground + 8, tick - step);
+                }
+            } else if (p.id === 37) {
+                p.texture0 = p.texture1 = SCRIPT_PARTICLE_TEXTURE_BASE + 15;
+            } else {
+                p.texture0 = SCRIPT_PARTICLE_TEXTURE_BASE + 7 + p.frame; p.texture1 = p.texture0 + 1;
+            }
+            if (step === tick) this.particles.push({ ...p, size: drawSize });
+        }
     }
 
     private addImpact(parent: ScriptParticle, y: number, age: number): void {

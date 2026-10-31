@@ -1,11 +1,12 @@
-import { equal, ok } from "node:assert/strict";
+import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
+import { RSP_Geometry, RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
+import { decodeCombineParams } from "../../Common/N64/RDP.js";
 import type { CombineParams } from "../../Common/N64/RDP.js";
 import { parseLevelDat } from "../level.js";
 import type { GeometryFace } from "../level.js";
-import { buildTerrain, COMBINE_TEXTURED, FAN_TEXTURE_ID_BASE, WATER_TEXTURE_ID } from "../terrain.js";
+import { buildTerrain, COMBINE_TEXTURED, COMBINE_TRANSLUCENT_VERTEX_ALPHA, FAN_TEXTURE_ID_BASE, WATER_TEXTURE_ID } from "../terrain.js";
 import { parseI8Texture } from "../texture.js";
 
 const dat = parseLevelDat(new ArrayBufferSlice(new ArrayBuffer(0xA0)));
@@ -22,7 +23,7 @@ function face(flags: number, texture: number, alpha: number): GeometryFace {
 function output(): RSPSharedOutput {
     const shared = new RSPSharedOutput();
     const texture = parseI8Texture(ArrayBufferSlice.fromView(new Uint8Array(1024).fill(255)), 32, 32, "test");
-    for (const id of [1, 23, 24, 41, WATER_TEXTURE_ID, FAN_TEXTURE_ID_BASE])
+    for (const id of [0, 1, 23, 24, 41, WATER_TEXTURE_ID, FAN_TEXTURE_ID_BASE])
         shared.textureCache.textures[id] = texture;
     return shared;
 }
@@ -43,6 +44,43 @@ test("textured translucent decals use vertex opacity even with an opaque texture
         equal(shared.vertices[0].a, sourceAlpha / 255);
         equal(alpha(draw.DP_Combine, shared.vertices[0].a, 1), sourceAlpha / 255);
     }
+});
+
+test("INTRO stage texture zero selects shade-only coloring and disables fog", () => {
+    for (const flags of [0x20, 0x22, 0x4020]) {
+        const shared = output();
+        const [draw] = buildTerrain(shared, { faces: [face(flags, 0, 254)], trailingBytes: 0 }, dat);
+        equal(draw.translucent, true);
+        deepEqual(draw.textureIndices, []);
+        equal(draw.SP_GeometryMode & RSP_Geometry.G_FOG, 0);
+        deepEqual(draw.DP_Combine, decodeCombineParams(0xFFFFFF, 0xFFFE7838));
+        equal(shared.vertices[0].a, 254 / 255);
+        equal(alpha(draw.DP_Combine, 254 / 255, 0), 254 / 255);
+    }
+});
+
+test("texture zero stays valid outside the ordinary translucent branch", () => {
+    for (const flags of [0, 0x40, 0x8000, 0x120]) {
+        const [draw] = buildTerrain(output(), { faces: [face(flags, 0, 255)], trailingBytes: 0 }, dat);
+        deepEqual(draw.textureIndices, [0]);
+        equal(draw.DP_Combine, flags === 0x120 ? COMBINE_TRANSLUCENT_VERTEX_ALPHA : COMBINE_TEXTURED);
+        ok(draw.SP_GeometryMode & RSP_Geometry.G_FOG);
+    }
+    for (const flags of [0x30, 0x220]) {
+        const [draw] = buildTerrain(output(), { faces: [face(flags, 0, 255)], trailingBytes: 0 }, dat);
+        deepEqual(draw.textureIndices, [WATER_TEXTURE_ID]);
+        equal(draw.DP_Combine, COMBINE_TEXTURED);
+    }
+});
+
+test("shade-only faces batch separately from missing textures and special materials", () => {
+    const faces = [face(0x20, 0, 254), face(0x22, 0, 254), face(0x20, 31, 89), face(0x120, 0, 89)];
+    const draws = buildTerrain(output(), { faces, trailingBytes: 0 }, dat);
+    equal(draws.length, 3);
+    const stage = draws.find(draw => (draw.SP_GeometryMode & RSP_Geometry.G_FOG) === 0);
+    ok(stage);
+    equal(stage.indexCount, 6);
+    deepEqual(stage.textureIndices, []);
 });
 
 test("opaque terrain remains opaque and untextured translucent terrain retains shade alpha", () => {
@@ -84,4 +122,12 @@ test("opaque special-combiner, cutout and animated faces do not inherit ordinary
         equal(draw.scrollStepS, 0);
         equal(draw.scrollStepT, 0);
     }
+});
+
+
+test("opaque fan slots survive a missing ordinary texture so the script host can bind I8 frames", () => {
+    const shared = output(); delete shared.textureCache.textures[41];
+    const [draw] = buildTerrain(shared, { faces: [{ ...face(2, 41, 255), variant: 1 }], trailingBytes: 0 }, dat);
+    equal(draw.fanAnimation?.slot, 1); equal(draw.fanAnimation?.kind, 8);
+    equal(draw.translucent, false); equal(draw.animationTextureIndices, null);
 });

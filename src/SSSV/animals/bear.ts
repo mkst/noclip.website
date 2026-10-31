@@ -46,3 +46,41 @@ export const BEAR_STATIC_RECIPE: AnimalModelRecipe = {
         { order: 17, kind: "apply-state-display-list", address: 0x01003840, segment: 1 },
     ],
 };
+
+export const MYSTERY_BEAR_STATIC_RECIPE: AnimalModelRecipe = {
+    eyes: "eyes6",
+    animalId: 24, species: "MYSTERY_BEAR",
+    pose: {
+        sample: {
+            // bear.c normal state-2 path at global tick 0, zero velocity/wobble,
+            // flat support and aligned head; the initial sample for tick animation.
+            jointPositions: {
+                0: { x: 0, z: 0, y: 2722 },
+                1: { x: 0, z: 0, y: 4018 }, 2: { x: 0, z: 0, y: 1426 },
+                7: { x: 1037, z: 0, y: 4018 }, 8: { x: 1037, z: 1932, y: 2714 },
+                10: { x: -1037, z: 0, y: 4018 }, 11: { x: -1037, z: 2324, y: 4018 },
+                19: { x: 0, z: 43, y: 4138 }, 20: { x: 0, z: 821, y: 4138 },
+                26: { x: 0, z: 0, y: 0 }, 27: { x: 0, z: 0, y: 1426 },
+            },
+            scaleInputs: { outerMatrixAxis16_16: [0x4000, 0x4000, 0x4000] },
+            eyeFrame: 0,
+        },
+    },
+    parts: [
+        part(0, "body", 0x040082C0, 1, 2),
+        part(2, "head", 0x04007BC0, 1, 20),
+        part(3, "rear left leg", 0x040077C0, 7, 8),
+        part(5, "rear right leg", 0x040077C0, 10, 11, 1),
+        part(6, "wheel", 0x04009540, 27, 26),
+        part(9, "left eye", 0x04008490, 1, 20),
+        part(11, "right eye", 0x040084A8, 1, 20),
+    ],
+    stateChanges: [
+        { order: 1, kind: "load-tile", paletteAddress: 0x010226B0, textureAddress: 0x010224B0 },
+        { order: 4, kind: "set-cull-mode", mode: "front" },
+        { order: 7, kind: "load-eye-palette-frame", paletteAddress: 0x01002C40, textureAddress: 0x010025A0 },
+        { order: 8, kind: "apply-state-display-list", address: 0x010037F0, segment: 1 },
+        { order: 10, kind: "load-eye-palette-frame", paletteAddress: 0x01002C40, textureAddress: 0x010025A0 },
+        { order: 12, kind: "apply-state-display-list", address: 0x01003840, segment: 1 },
+    ],
+};

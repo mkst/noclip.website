@@ -54,6 +54,28 @@ jobs:
           cargo install cargo-run-bin --locked
           cargo bin --install
 
+      - name: Checkout music bank parser
+        uses: actions/checkout@v7
+        with:
+          repository: jsdf/n64soundtools
+          ref: 6688c7ee216639f63e351d2c9bce8774a43a699f
+          path: .music-tools/bank-parser
+          persist-credentials: false
+
+      - name: Checkout music sequence and sample converters
+        uses: actions/checkout@v7
+        with:
+          repository: VetriTheRetri/ssb-decomp-re
+          ref: 572a747d8171137718fad472c5d7473dc7309ffd
+          path: .music-tools/sequences
+          sparse-checkout: tools
+          persist-credentials: false
+
+      - name: Install audio rendering dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfluidsynth3 ffmpeg
+
       - name: Checkout encrypted baserom
         uses: actions/checkout@v7
         with:
@@ -75,6 +97,23 @@ jobs:
             -in .rom-source/baserom.us.z64.aes -out "$rom_path"
           printf 'e5e09205aa743a9e5043a42df72adc379c746b0b  %s\n' "$rom_path" | sha1sum --check
           pnpm build:SSSV --rom "$rom_path"
+          pnpm exec tsx src/SSSV/tools/extract_audio.ts --rom "$rom_path" --out "$RUNNER_TEMP/sssv-audio"
+
+      - name: Generate soundtrack from extracted audio
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 src/SSSV/tools/build_music_soundfont.py \
+            --audio "$RUNNER_TEMP/sssv-audio" \
+            --bank-parser .music-tools/bank-parser/soundtools.js \
+            --codec .music-tools/sequences/tools/audio_codec.py \
+            --out "$RUNNER_TEMP/sssv-music.sf2"
+          python3 src/SSSV/tools/render_music.py \
+            --converter .music-tools/sequences/tools/cseq_to_mid.py \
+            --soundfont "$RUNNER_TEMP/sssv-music.sf2" \
+            --sequences "$RUNNER_TEMP/sssv-audio/raw/sequences" \
+            --out data/SSSV/audio/music
+          pnpm exec tsx src/SSSV/tools/copy_music.ts --verify data/SSSV/audio/music
 
       - name: Verify all SSSV levels
         run: pnpm exec tsx src/SSSV/tools/verify.ts --all
@@ -90,6 +129,7 @@ jobs:
         run: |
           mkdir -p dist/data
           cp -R data/SSSV dist/data/SSSV
+          pnpm exec tsx src/SSSV/tools/copy_music.ts --verify dist/data/SSSV/audio/music
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4

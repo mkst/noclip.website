@@ -13,7 +13,7 @@ import { FOX_STATIC_RECIPE, RACING_FOX_STATIC_RECIPE, RACING_FOX_DEACTIVATED_REC
 import { RACING_MOUSE_STATIC_RECIPE, RACING_MOUSE_DEACTIVATED_RECIPE } from "./animals/mouse.js";
 import { createRacingDogRecipes } from "./animals/racing_dog.js";
 import { RAT_STATIC_RECIPE, KING_RAT_STATIC_RECIPE } from "./animals/rat.js";
-import { BEAR_STATIC_RECIPE } from "./animals/bear.js";
+import { BEAR_STATIC_RECIPE, MYSTERY_BEAR_STATIC_RECIPE } from "./animals/bear.js";
 import { FLYING_DOG_STATIC_RECIPE } from "./animals/flying_dog.js";
 import { FIRE_FOX_STATIC_RECIPE } from "./animals/fire_fox.js";
 import { PENGUIN_STATIC_RECIPE, KING_PENGUIN_STATIC_RECIPE, KING_PENGUIN_DEACTIVATED_RECIPE } from "./animals/penguin.js";
@@ -247,6 +247,7 @@ export function getStaticAnimalRecipe(placement: Pick<LevelAnimalPlacement, "id"
     if (placement.id === RAT_STATIC_RECIPE.animalId && placement.health > 0) return RAT_STATIC_RECIPE;
     if (placement.id === KING_RAT_STATIC_RECIPE.animalId && placement.health > 0) return KING_RAT_STATIC_RECIPE;
     if (placement.id === BEAR_STATIC_RECIPE.animalId && placement.health > 0) return BEAR_STATIC_RECIPE;
+    if (placement.id === MYSTERY_BEAR_STATIC_RECIPE.animalId && placement.health > 0) return MYSTERY_BEAR_STATIC_RECIPE;
     if (placement.id === FLYING_DOG_STATIC_RECIPE.animalId && placement.health > 0) return FLYING_DOG_STATIC_RECIPE;
     if (placement.id === FIRE_FOX_STATIC_RECIPE.animalId && placement.health > 0) return FIRE_FOX_STATIC_RECIPE;
     if (placement.id === KING_PENGUIN_STATIC_RECIPE.animalId) return placement.health > 0 ? KING_PENGUIN_STATIC_RECIPE : KING_PENGUIN_DEACTIVATED_RECIPE;

@@ -95,6 +95,22 @@ export class CommandWorld implements CommandHost {
         return commandSuccess(target !== null && this.entities.has(target) ? target : null);
     }
 
+    public assignReference(owner: CommandEntityId, target: CommandEntityId | null, payload: DataView): CommandResult<void> {
+        const destination = payload.getInt16(2);
+        if (destination < 1 || destination > 7) return commandFailure(`Unsupported reference destination ${destination}`);
+        const recipient = this.resolveReference(owner, target, payload.getInt16(0), 0);
+        if (!recipient.ok) return recipient;
+        const outer = this.resolveReference(owner, target, payload.getInt16(4), 0);
+        if (!outer.ok) return outer;
+        if (recipient.value === null || outer.value === null) return commandFailure("Reference assignment has no live target", "invalid-reference");
+        const value = this.resolveReference(outer.value, outer.value === owner ? target : outer.value, payload.getInt16(6), 0);
+        if (!value.ok) return value;
+        const entity = this.getEntity(recipient.value)!;
+        if (value.value === null) entity.references.delete(destination);
+        else entity.references.set(destination, value.value);
+        return commandSuccess(undefined);
+    }
+
     public readOperand(id: CommandEntityId | null, operand: number): CommandResult<number> {
         if (operand < 0x7F7F) return commandSuccess(operand);
         if (operand >= 0x7FBF && operand < 0x7FDF) return commandSuccess(this.globals[operand - 0x7FBF]);
@@ -102,6 +118,11 @@ export class CommandWorld implements CommandHost {
         const entity = id === null ? null : this.getEntity(id);
         if (entity === null) return commandFailure(`Missing operand entity ${id}`, "invalid-reference");
         if (operand <= 0x7F81) return commandSuccess(entity.temporaries[operand - 0x7F7F]);
+        if (operand >= 0x7F85 && operand <= 0x7F87) {
+            if (entity.position === null) return commandFailure("Position operand has no live position", "invalid-reference");
+            const position = [entity.position.x, entity.position.z, entity.position.y][operand - 0x7F85];
+            return commandSuccess((Math.floor(position) << 16) >> 16);
+        }
         if (operand === 0x7F94) return commandSuccess(entity.state);
         if (operand === 0x7F9F) return commandSuccess(entity.typeId);
         return commandFailure(`Unsupported state operand 0x${operand.toString(16)}`);

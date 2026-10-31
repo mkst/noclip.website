@@ -1,11 +1,11 @@
 import { commandFailure, commandSuccess } from "./command_vm.js";
 import type { CommandEntityId, CommandResult } from "./command_vm.js";
 import { CommandWorld } from "./command_world.js";
-import { sinDegrees } from "./degree_math.js";
+import { cos256, sinDegrees } from "./degree_math.js";
 import type { LevelObjectPlacement } from "./level.js";
 import type { SSSVObjectData } from "./objects.js";
 
-interface LinearMovement { start: number[]; target: number[]; progress: number; speed: number; }
+interface LinearMovement { start: number[]; target: number[]; progress: number; speed: number; mode: 1 | 2; }
 export interface CommandObject {
     readonly id: CommandEntityId;
     readonly typeId: number;
@@ -14,6 +14,7 @@ export interface CommandObject {
     scale: number;
     material: number;
     flags: number;
+    physicsFlags: number;
     angle: number;
     zRotation: number;
     zPerTick: number;
@@ -25,20 +26,28 @@ const normalize = (v: number) => (v % 360 + 360) % 360;
 
 // Direct-update objects only (func_802FB270). Physics/callback-driven objects
 // need additional capabilities before they can enter this host.
+export interface CommandObjectPolicy {
+    silentCallbacks?: ReadonlySet<number>;
+    secondaryList?: boolean;
+    initialPhysicsTypes?: ReadonlySet<number>;
+    materials?: ReadonlyMap<number, ReadonlySet<number>>;
+}
+
 export class CommandObjectWorld extends CommandWorld {
     public readonly objects = new Map<CommandEntityId, CommandObject>();
     constructor(private readonly catalog: ReadonlyMap<number, SSSVObjectData>, private readonly waterHeight: (x: number, z: number) => number | null,
-        private readonly capacity: number) { super([], "silent"); }
+        private readonly capacity: number, private readonly policy: CommandObjectPolicy = {}) { super([], "silent"); }
 
     public createObject(id: string, p: LevelObjectPlacement): CommandResult<CommandObject> {
         const definition = this.catalog.get(p.id);
-        if (!definition || definition.updateCallback !== 0 || definition.behaviorFlags === undefined
-            || (definition.behaviorFlags & 0x0C) !== 0 || !(definition.behaviorFlags & 0x40))
+        if (!definition || definition.updateCallback !== 0 && !this.policy.silentCallbacks?.has(definition.updateCallback!) || definition.behaviorFlags === undefined
+            || (definition.behaviorFlags & 0x0C) !== 0 && !this.policy.initialPhysicsTypes?.has(p.id)
+            || !(definition.behaviorFlags & 0x40) && !this.policy.secondaryList)
             return commandFailure(`Object ${p.id} requires physics or an unsupported update callback`);
         if (this.objects.size >= this.capacity || this.objects.has(id)) return commandFailure("Command object capacity exceeded", "invalid-data");
         this.addEntity({ id, typeId: p.id, position: { x: s16(p.x), y: s16(p.y), z: s16(p.z) } });
         const object: CommandObject = { id, typeId: p.id, fixedPosition: Int32Array.from([p.x << 16, p.y << 16, p.z << 16]), velocity: new Int32Array(3),
-            scale: definition.scaleOverride || p.scale || 2048, material: p.unkC, flags: 0, angle: p.angle, zRotation: p.zRotation, zPerTick: 0, yPerTick: 0, movement: null };
+            scale: definition.scaleOverride || p.scale || 2048, material: p.unkC, flags: 0, physicsFlags: definition.behaviorFlags & 0x1C, angle: p.angle, zRotation: p.zRotation, zPerTick: 0, yPerTick: 0, movement: null };
         this.objects.set(id, object); return commandSuccess(object);
     }
 
@@ -46,6 +55,7 @@ export class CommandObjectWorld extends CommandWorld {
 
     public integrate(id: string): void {
         const o = this.objects.get(id)!, p = this.getEntity(id)!.position!;
+        if (o.physicsFlags & 12) throw new Error(`Physics required for command object ${id}`);
         for (let i = 0; i < 3; i++) o.fixedPosition[i] += o.velocity[i];
         // Game-state reads and subsequent relative moves use the signed high word.
         p.x = o.fixedPosition[0] >> 16; p.y = o.fixedPosition[1] >> 16; p.z = o.fixedPosition[2] >> 16;
@@ -57,9 +67,15 @@ export class CommandObjectWorld extends CommandWorld {
             if (movement.progress >= 256) { o.movement = null; o.velocity.fill(0); }
             else if (this.getEntity(id)!.state === 0) o.velocity.fill(0);
             else {
-                movement.progress = Math.min(256, movement.progress + movement.speed);
-                for (let i = 0; i < 3; i++) o.velocity[i] = ((movement.start[i] << 16)
-                    + (((movement.target[i] - movement.start[i]) * movement.progress) << 8)) - o.fixedPosition[i];
+                movement.progress = movement.mode === 1 ? movement.progress + movement.speed : Math.min(256, movement.progress + movement.speed);
+                let cosine = movement.progress >= 256 ? -32768 : cos256(movement.progress >> 1);
+                if (movement.mode === 1 && (movement.progress & 1)) cosine = (cosine + cos256((movement.progress >> 1) + 1)) >> 1;
+                for (let i = 0; i < 3; i++) {
+                    const half = (movement.target[i] - movement.start[i]) >> 1;
+                    const next = movement.mode === 2 ? (movement.start[i] << 16) + (((movement.target[i] - movement.start[i]) * movement.progress) << 8)
+                        : ((movement.start[i] + half) << 16) - half * 2 * cosine;
+                    o.velocity[i] = next - o.fixedPosition[i];
+                }
             }
         }
         o.angle = s16(o.angle + o.yPerTick) % 360;
@@ -114,27 +130,34 @@ export class CommandObjectWorld extends CommandWorld {
                 angle: yaw, zRotation: tilt, scale: 2048, unkC: 0, commandReferenceIdx: 0, commandsLength: 0, unk12: 0, unk15: 0 });
             if (!result.ok) return result;
             issuer.references.set(7, id);
+        } else if (opcode === 0x57) {
+            const flags = p.getInt16(0);
+            if (flags & 6) return commandFailure("Physics-enabled object flags require a physics host");
+            o.physicsFlags = (o.physicsFlags & ~0x1C) | (flags & 1 ? 0x10 : 0);
         } else if (opcode === 0x36) o.scale = p.getUint16(0) || 2048;
         else if (opcode === 0x33) {
             const value = this.readOperand(target, p.getUint16(0));
             if (!value.ok) return value;
-            o.material = value.value & 65535;
-        } else if (opcode === 0x1C || opcode === 0x32) {
-            const offsets = opcode === 0x1C ? [0, 4, 2, 6] : [2, 6];
+            const material = value.value & 65535;
+            const allowed = this.policy.materials?.get(o.typeId);
+            if (allowed !== undefined && !allowed.has(material)) return commandFailure(`Unsupported material ${material} for object ${o.typeId}`);
+            o.material = material;
+        } else if (opcode === 0x19 || opcode === 0x1B || opcode === 0x1C || opcode === 0x32) {
+            const offsets = opcode !== 0x32 ? [0, 4, 2, 6] : [2, 6];
             const values: number[] = [];
             for (const offset of offsets) {
-                const value = this.readOperand(target, p.getInt16(offset));
+                const value = opcode === 0x19 ? commandSuccess(p.getInt16(offset)) : this.readOperand(target, p.getInt16(offset));
                 if (!value.ok) return value;
                 values.push(value.value);
             }
-            if (opcode === 0x1C) {
+            if (opcode !== 0x32) {
                 const speed = s16(values[3]);
                 if (speed < 1 || speed > 256) return commandFailure(`Unsupported linear movement step ${speed}`);
                 const start = Array.from(o.fixedPosition, v => v >> 16);
-                o.movement = { start, target: start.map((v, i) => s16(v + values[i])), speed, progress: 0 };
+                o.movement = { start, target: start.map((v, i) => s16((opcode === 0x19 ? 0 : v) + values[i])), speed, progress: 0, mode: opcode === 0x1C ? 2 : 1 };
             } else {
                 const definition = this.catalog.get(o.typeId)!;
-                if (p.getUint8(0) !== 0x10 || (definition.orientationMode === 4 && definition.collideHeight !== definition.width * 2))
+                if (p.getUint8(0) !== 0x10 || (values[0] !== 0 && definition.orientationMode === 4 && definition.collideHeight !== definition.width * 2))
                     return commandFailure("Rotation requires unsupported mode or collision-height adjustment");
                 o.zPerTick = s16(values[0]); o.yPerTick = s16(values[1]);
             }

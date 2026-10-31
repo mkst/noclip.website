@@ -8,7 +8,9 @@ import { FLYING_DOG_STATIC_RECIPE } from "../animals/flying_dog.js";
 import { FIRE_FOX_STATIC_RECIPE } from "../animals/fire_fox.js";
 import { getStaticAnimalRecipe } from "../animal_contracts.js";
 import { ANIMAL_EYE_ATLASES, sampleAnimalEyeFrame } from "../animal_eyes.js";
-import { buildStaticAnimalModels } from "../animal_renderer.js";
+import { buildStaticAnimalModels, updateAnimalFlame } from "../animal_renderer.js";
+import { FireFoxParticleSimulation, sampleFireFoxFlameScale, spawnFireFoxParticles } from "../fire_fox_effects.js";
+import { particleDefinitionFile, parseParticleDefinition, SCRIPT_PARTICLE_IDS } from "../particle_assets.js";
 import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseLevelDat } from "../level.js";
 
 (globalThis as any).window = { debug: false };
@@ -22,8 +24,71 @@ function buildFixtures() {
     const map = Array.from({ length: MAP_X_POINTS * MAP_Z_POINTS }, () => ({ unk0: 0, unk1: 0, unk2: 0, unk3: 0, unk4: 0, unk5: 0, unk6: 0, unk7: 0 }));
     const dat = parseLevelDat(findPayload(parseLevelContainer(read("data/SSSV/levels/HONEYMOON_LAGOON.bin")), LevelPayloadType.Dat)!);
     const placements = [5, 7].map(id => ({ id, x: 1000, z: 1000, y: 100, rotation: 0, health: 127, unkC: 0, unkE: 0 }));
-    return { output, builds: buildStaticAnimalModels(output, segments, placements, map, dat) };
+    return { output, map, dat, builds: buildStaticAnimalModels(output, segments, placements, map, dat) };
 }
+
+test("FIRE_FOX flame samples the source scale range on independent axes", () => {
+    const values = [0, 128, 255];
+    deepEqual(sampleFireFoxFlameScale({ mask: () => values.shift()! }), [59392, 74240, 88972]);
+});
+
+test("FIRE_FOX flame updates only its own vertices and repeats after seeks", () => {
+    const { output, builds: [dog, fox] } = buildFixtures();
+    equal(dog.flame, null);
+    const flame = fox.flame!;
+    ok(flame !== null && flame.targets.length > 0 && flame.vertexCount === flame.targets.length);
+    const data = new Float32Array(output.vertices.length * 10).fill(-999);
+    ok(updateAnimalFlame(flame, data, 30));
+    const frame = data.slice();
+    equal(updateAnimalFlame(flame, data, 30), false);
+    updateAnimalFlame(flame, data, 0);
+    ok(data.some((value, i) => value !== frame[i]));
+    updateAnimalFlame(flame, data, 30);
+    deepEqual(data, frame);
+    ok(data.every(Number.isFinite));
+    for (let i = 0; i < output.vertices.length; i++)
+        if (i < flame.firstVertex || i >= flame.firstVertex + flame.vertexCount)
+            ok(data.subarray(i * 10, (i + 1) * 10).every(v => v === -999));
+});
+
+test("FIRE_FOX particle calls preserve source anchors, black colours and emission bounds", () => {
+    const { map, builds: [, fox] } = buildFixtures();
+    const definitions = new Map(SCRIPT_PARTICLE_IDS.map(id => [id, parseParticleDefinition(read(`data/SSSV/${particleDefinitionFile(id)}`))]));
+    let extras = 0;
+    for (let tick = 1; tick <= 120; tick++) {
+        const births = spawnFireFoxParticles(fox, tick, definitions, map);
+        ok(births.length === 1 || births.length === 2);
+        extras += births.length - 1;
+        for (const [index, { particle: p }] of births.entries()) {
+            equal(p.x / 65536, 1000); equal(p.z / 65536, 974); equal(p.y / 65536, 108);
+            ok(p.id === 25 || p.id === 26);
+            equal(p.vy, 0); equal(p.primaryColor, 1); equal(p.environmentColor, 1);
+            ok(p.size > 0 && p.size <= Math.max(15, definitions.get(p.id)!.defaultSize));
+            ok(p.targetSize >= 25 && p.targetSize <= 56);
+            ok([p.vx, p.vz].every(v => v >= (index ? 0 : -40000) && v <= (index ? 65534 : 25534)));
+        }
+    }
+    ok(extras > 0 && extras < 120);
+    const rotated = spawnFireFoxParticles({ ...fox, placement: { ...fox.placement, rotation: 64 } }, 1, definitions, map)[0].particle;
+    equal(rotated.x / 65536, 973); equal(rotated.z / 65536, 1000);
+});
+
+test("FIRE_FOX particles replay bounded history and follow visibility at a paused tick", () => {
+    const { map, dat, builds: [, fox] } = buildFixtures();
+    const definitions = new Map(SCRIPT_PARTICLE_IDS.map(id => [id, parseParticleDefinition(read(`data/SSSV/${particleDefinitionFile(id)}`))]));
+    const sim = new FireFoxParticleSimulation([fox], definitions, map, dat);
+    sim.advanceTo(0); equal(sim.particles.length, 0);
+    sim.advanceTo(120);
+    const frame = structuredClone(sim.particles);
+    ok(frame.length > 0 && frame.length < 76);
+    sim.advanceTo(120); deepEqual(sim.particles, frame);
+    sim.advanceTo(5); sim.advanceTo(120); deepEqual(sim.particles, frame);
+    fox.drawCalls.forEach(d => d.visible = false);
+    sim.advanceTo(120); equal(sim.particles.length, 0);
+    fox.drawCalls.forEach(d => d.visible = true);
+    sim.advanceTo(120); deepEqual(sim.particles, frame);
+    sim.advanceTo(100000); ok(sim.particles.length > 0 && sim.particles.length < 76);
+});
 
 test("neutral flight joints match the original C helpers and species footHeight stats", () => {
     // /tmp/sssv-flight-ref.c executes BAA38, C4A70, BB70 and BBA10 with no pitch,

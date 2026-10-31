@@ -1,3 +1,5 @@
+import { BoulderCommandWorld } from "./boulder_commands.js";
+import type { BoulderProgram } from "./boulder_commands.js";
 import { sinDegrees } from "./degree_math.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import type { LevelMapEntry, LevelObjectPlacement } from "./level.js";
@@ -5,7 +7,7 @@ import type { LevelCommand } from "./paths.js";
 import type { ParticleDefinition } from "./particle_assets.js";
 import { LEVEL_EVENT_TEXTURE_BASE, LEVEL_EVENT_TEXTURE_OFFSETS } from "./particle_assets.js";
 import { persistentEmissionCount } from "./particle_emitters.js";
-import type { PersistentEmitter } from "./particle_emitters.js";
+import type { EmitterConfiguration, PersistentEmitter } from "./particle_emitters.js";
 import { sampleParticleSurfaces } from "./particles.js";
 import { spawnScriptParticle } from "./script_particles.js";
 import type { ScriptParticle } from "./script_particles.js";
@@ -29,6 +31,12 @@ const jungleTimedScript = [
     "00180000450000000000", "00480295000000000000", "000115007fd2012c000a", "0026004b3e807fff0100",
     "004700061e1e00000000", "00130000000000000000", "00090000000000000000",
 ];
+const playerDistanceHelper = [
+    "00000000000000000000", "00140009000000000000", "003d7f85006400005300", "003d7f86006400005400",
+    "00140000000000000000", "003d7fd27f8500005320", "003d7fd37f8600005420", "00000000000000000000",
+    "006553007fd200000000", "006554007fd300000000", "003d7fd27fd300005310", "00490000000000000000",
+];
+
 const jungleContactScript = [
     "00067f7f000000000000", "00100200000000383300", "00140007000000000000", "003d0001000000001200",
     "003d10000bd304000901", "00330014000000000000", "000e00fb000000000000", "00140000000000000000",
@@ -58,6 +66,7 @@ export interface EventRegion {
 }
 
 export interface BoulderEventConfig {
+    commands: readonly LevelCommand[];
     spawners: { placementIndex: number; placement: LevelObjectPlacement; interval?: number }[];
     region: EventRegion | null;
     scriptBase: number;
@@ -66,7 +75,7 @@ export interface BoulderEventConfig {
 
 export function readBoulderEvent(placements: readonly LevelObjectPlacement[], commands: readonly LevelCommand[], ranges: ArrayBufferSlice | null): BoulderEventConfig | null {
     const jungleSpawners: BoulderEventConfig["spawners"] = [];
-    const timed = matchesRecords(commands, 7, jungleTimedScript);
+    const timed = matchesRecords(commands, 7, jungleTimedScript) && matchesRecords(commands, 661, playerDistanceHelper);
     const contact = matchesRecords(commands, 242, jungleContactScript);
     placements.forEach((placement, placementIndex) => {
         if (placement.id !== 64 || placement.commandReferenceIdx <= 0 || placement.commandsLength !== 0) return;
@@ -82,7 +91,7 @@ export function readBoulderEvent(placements: readonly LevelObjectPlacement[], co
         }
     });
     if (jungleSpawners.length !== 0)
-        return { spawners: jungleSpawners, region: null, scriptBase: 7, kind: "jungle" };
+        return { spawners: jungleSpawners, region: null, scriptBase: 7, kind: "jungle", commands };
     const spawners: BoulderEventConfig["spawners"] = [];
     let scriptBase = -1;
     placements.forEach((placement, placementIndex) => {
@@ -105,7 +114,7 @@ export function readBoulderEvent(placements: readonly LevelObjectPlacement[], co
     const region = { x0: view.getUint8(offset), z0: view.getUint8(offset + 1), y0: view.getUint8(offset + 2),
         x1: view.getUint8(offset + 3), z1: view.getUint8(offset + 4), y1: view.getUint8(offset + 5) };
     // Camera triggering cannot supply the player's upper/lower-surface state.
-    return region.y0 === 240 ? { spawners, region, scriptBase } : null;
+    return region.y0 === 240 ? { spawners, region, scriptBase, commands } : null;
 }
 
 export function cameraInEventRegion(region: EventRegion, x: number, z: number): boolean {
@@ -114,6 +123,8 @@ export function cameraInEventRegion(region: EventRegion, x: number, z: number): 
 }
 
 export interface EventBoulder {
+    commandId?: string;
+    rotation?: number;
     slot: number;
     sourceIndex: number;
     x: number; z: number; y: number;
@@ -142,9 +153,7 @@ export class BoulderEventSimulation {
     public expirationCount = 0;
     private lastTick: number | null = null;
     private randomState = 0x524F434B;
-    private delays: number[] = [];
-    private headings: number[] = [];
-    private rotating: boolean[] = [];
+    public commands!: BoulderCommandWorld;
 
     constructor(public readonly config: BoulderEventConfig, private map: readonly LevelMapEntry[], private definitions: ReadonlyMap<number, ParticleDefinition>, public readonly bodyHeight: number, private bodyWidth: number, private debrisColor: number) {
         this.reset();
@@ -159,11 +168,17 @@ export class BoulderEventSimulation {
     private reset(): void {
         this.lastTick = null;
         this.randomState = 0x524F434B;
-        this.delays = this.config.spawners.map(() => 0);
-        this.headings = this.config.spawners.map(source => source.placement.angle);
-        this.rotating = this.config.spawners.map(() => false);
         this.boulders.length = this.impacts.length = this.particles.length = 0;
         this.spawnCount = this.impactCount = this.expirationCount = 0;
+        this.commands = new BoulderCommandWorld(this.config, this.config.commands, {
+            random: n => this.random(n), spawn: (source, yaw, pitch, speed) => this.spawn(source, yaw, pitch, speed),
+            remove: (boulder, effect) => {
+                if (effect === 10 || effect === 13) this.impact(boulder);
+                else this.expirationCount++;
+                const index = this.boulders.indexOf(boulder);
+                if (index >= 0) this.boulders.splice(index, 1);
+            },
+        });
     }
 
     private random(n: number): number {
@@ -183,98 +198,61 @@ export class BoulderEventSimulation {
         const active = this.config.region === null || cameraInEventRegion(this.config.region, cameraX, cameraZ);
         while (this.lastTick < tick) {
             this.lastTick++;
-            this.step(active);
+            this.step(active, cameraX, cameraZ);
         }
     }
 
-    private step(active: boolean): void {
+    private step(active: boolean, cameraX: number, cameraZ: number): void {
         for (let i = this.impacts.length - 1; i >= 0; i--)
             if (++this.impacts[i].age >= 16) this.impacts.splice(i, 1);
         for (let i = this.particles.length - 1; i >= 0; i--)
             if (!this.advanceParticle(this.particles[i])) this.particles.splice(i, 1);
-        for (let i = this.boulders.length - 1; i >= 0; i--) {
-            const boulder = this.boulders[i];
-            const previousY = boulder.y / 65536;
-            boulder.age++;
-            if (this.config.kind !== "jungle" && boulder.scale < 2048) boulder.scale += 80;
-            boulder.vy -= 0x20000;
-            boulder.x += boulder.vx; boulder.z += boulder.vz; boulder.y += boulder.vy;
-            if (boulder.expiresAfter !== undefined && boulder.age >= boulder.expiresAfter) {
-                this.expirationCount++;
-                this.boulders.splice(i, 1);
-                continue;
-            }
-            const surface = sampleParticleSurfaces(this.map, boulder.x / 65536, boulder.z / 65536);
-            if (surface === null || boulder.age > 240) { this.boulders.splice(i, 1); continue; }
-            let floor = surface.ground;
-            if (Number.isFinite(surface.upper) && previousY >= surface.upper)
-                floor = Math.max(floor, surface.upper);
-            if (this.config.kind === "jungle" && boulder.expiresAfter === undefined && previousY >= surface.water)
-                floor = Math.max(floor, surface.water);
-            if (boulder.y / 65536 <= floor && boulder.vy <= 0) {
-                boulder.y = floor * 65536;
-                if (boulder.expiresAfter !== undefined) boulder.vy = 0;
-                else {
-                    this.impact(boulder);
-                    this.boulders.splice(i, 1);
-                    continue;
-                }
-            }
-            const count = persistentEmissionCount({ flags: 9, frequency: 2 }, boulder.age);
-            for (let ordinal = 0; ordinal < count; ordinal++) this.emitTrail(boulder);
-        }
-        this.config.spawners.forEach((source, sourceIndex) => {
-            if (this.delays[sourceIndex] > 0) {
-                if (--this.delays[sourceIndex] === 0) {
-                    this.spawn(sourceIndex);
-                    if (active) this.delays[sourceIndex] = this.nextDelay(sourceIndex);
-                }
-            } else if (active) this.delays[sourceIndex] = this.nextDelay(sourceIndex);
-            if (this.rotating[sourceIndex]) this.headings[sourceIndex] = (this.headings[sourceIndex] + 4) % 360;
+        this.commands.step(active, cameraX, cameraZ, program => this.advanceBoulder(program), program => {
+            const b = program.boulder!;
+            const count = persistentEmissionCount(program.emitter, b.age);
+            for (let ordinal = 0; ordinal < count; ordinal++) this.emitTrail(b, program.emitter);
         });
         if (this.particles.length > 255) this.particles.splice(0, this.particles.length - 255);
     }
 
-    private nextDelay(sourceIndex: number): number {
-        if (this.config.kind === "jungle") return this.config.spawners[sourceIndex].interval ?? this.random(100) + 50;
-        return this.random(40) + 50;
-    }
-
-    private spawn(sourceIndex: number): void {
-        const used = new Set(this.boulders.map(b => b.slot));
-        let slot = 0;
-        while (used.has(slot)) slot++;
-        if (slot >= 20) return;
-        const placement = this.config.spawners[sourceIndex].placement;
-        if (this.config.kind === "jungle") {
-            const interval = this.config.spawners[sourceIndex].interval;
-            const pitch = (placement.zRotation + ((interval === undefined ? 60 : 56) * 360 >> 8)) % 360;
-            const heading = this.headings[sourceIndex];
-            const [vx, vz, vy] = jungleLaunchVelocity(pitch, heading, interval === undefined ? 70 : 51);
-            const surface = sampleParticleSurfaces(this.map, placement.x, placement.z);
-            const y = Math.max(placement.y, surface?.ground ?? placement.y);
-            this.boulders.push({ slot, sourceIndex, x: placement.x * 65536, z: placement.z * 65536, y: y * 65536, vx, vz, vy,
-                scale: interval === undefined ? this.random(3027) + 1024 : 4096, heading, pitch, age: 0,
-                expiresAfter: interval === undefined ? this.random(20) + 20 : undefined });
-            if (interval === undefined) this.rotating[sourceIndex] = true;
-            this.spawnCount++;
-            return;
+    private advanceBoulder(program: BoulderProgram): void {
+        const b = program.boulder!, previousY = b.y / 65536;
+        b.age++; b.vy -= 0x20000;
+        b.x += b.vx; b.z += b.vz; b.y += b.vy;
+        const surface = sampleParticleSurfaces(this.map, b.x / 65536, b.z / 65536);
+        if (surface === null || b.age > 240) {
+            const index = this.boulders.indexOf(b); if (index >= 0) this.boulders.splice(index, 1);
+            this.commands.remove(program.id); return;
         }
-        const yaw = placement.angle * Math.PI / 180;
-        this.boulders.push({ slot, sourceIndex, x: placement.x * 65536, z: placement.z * 65536, y: placement.y * 65536,
-            vx: Math.trunc(Math.sin(yaw) * 256) * 2560, vz: Math.trunc(Math.cos(yaw) * 256) * 2560, vy: 0,
-            scale: 1024, heading: placement.angle, age: 0 });
-        this.spawnCount++;
+        let floor = surface.ground;
+        if (Number.isFinite(surface.upper) && previousY >= surface.upper) floor = Math.max(floor, surface.upper);
+        const timed = this.config.kind === "jungle" && this.config.spawners[b.sourceIndex].interval === undefined;
+        if (this.config.kind === "jungle" && !timed && previousY >= surface.water) floor = Math.max(floor, surface.water);
+        const entity = this.commands.getEntity(program.id)!; entity.contactFlags = 0;
+        if (b.y / 65536 <= floor && b.vy <= 0) {
+            b.y = floor * 65536; b.vy = 0; entity.contactFlags = 2;
+        }
     }
 
-    private emitTrail(b: EventBoulder): void {
+    private spawn(sourceIndex: number, heading: number, pitch: number, speed: number): EventBoulder | null {
+        const used = new Set(this.boulders.map(b => b.slot));
+        let slot = 0; while (used.has(slot)) slot++;
+        if (slot >= 20) return null;
+        const placement = this.config.spawners[sourceIndex].placement;
+        const [vx, vz, vy] = jungleLaunchVelocity(pitch, heading, speed);
+        const surface = sampleParticleSurfaces(this.map, placement.x, placement.z);
+        const y = Math.max(placement.y, surface?.ground ?? placement.y);
+        const boulder: EventBoulder = { slot, sourceIndex, x: placement.x * 65536, z: placement.z * 65536, y: y * 65536,
+            vx, vz, vy, scale: 2048, heading, pitch, rotation: pitch, age: 0 };
+        this.boulders.push(boulder); this.spawnCount++; return boulder;
+    }
+
+    private emitTrail(b: EventBoulder, configuration: EmitterConfiguration): void {
         const source = this.config.spawners[b.sourceIndex];
         const emitter: PersistentEmitter = {
             placementIndex: source.placementIndex, placement: { ...source.placement, x: b.x >> 16, z: b.z >> 16, y: b.y >> 16 },
             scale: b.scale, height: Math.floor(this.bodyHeight * b.scale / 2048),
-            initial: { flags: this.config.kind === "jungle" ? 9 : 0x89, particleId: this.config.kind === "jungle" ? 1 : 4,
-                frequency: 2, size: this.config.kind === "jungle" ? 32 : 25, argument: 0, duration: 0,
-                offset: [0, 0, 0], spread: [0, 0, 0], direction: [63, 0, 8], directionSpread: [0, 0, 0], primaryColor: 0, environmentColor: 0 },
+            initial: configuration,
             provenance: { placementIndex: source.placementIndex, initialEntry: source.placement.commandReferenceIdx - 1, target: { kind: "object", index: source.placementIndex }, commandIndices: [], unsupportedReason: null },
         };
         const { particle } = spawnScriptParticle(emitter, b.sourceIndex, this.definitions, this.map, this.random(0x7FFFFFFF));

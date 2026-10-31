@@ -37,9 +37,9 @@ export class BoulderEventVisuals {
         for (const rock of this.simulation.boulders) {
             const scale = rock.scale / 2048;
             const placement: LevelObjectPlacement = { id: 2, x: rock.x / 65536, z: rock.z / 65536, y: rock.y / 65536,
-                angle: rock.heading, zRotation: rock.pitch ?? 0, scale: rock.scale, unkC: 20, commandReferenceIdx: 0, commandsLength: 0, unk12: 0, unk15: 0 };
+                angle: rock.heading, zRotation: rock.rotation ?? rock.pitch ?? 0, scale: rock.scale, unkC: 20, commandReferenceIdx: 0, commandsLength: 0, unk12: 0, unk15: 0 };
             for (const draw of this.rocks[rock.slot]) {
-                computeObjectRotationMatrix(assertExists(draw.modelMatrix), { placement, rotation: { zPerTick: this.simulation.config.kind === "jungle" ? 0 : 20, yPerTick: 0 }, scale,
+                computeObjectRotationMatrix(assertExists(draw.modelMatrix), { placement, rotation: { zPerTick: rock.rotation !== undefined || this.simulation.config.kind === "jungle" ? 0 : 20, yPerTick: 0 }, scale,
                     originY: Math.floor(this.simulation.bodyHeight * scale) / 2, localMatrix: null }, rock.age);
                 vec3.set(draw.center, placement.x, placement.y + this.simulation.bodyHeight * scale / 2, mirrorZ(placement.z));
                 draw.visible = true;

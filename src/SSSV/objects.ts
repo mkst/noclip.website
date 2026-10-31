@@ -1,3 +1,5 @@
+import { COMBINE_FLOOR_BUTTON_GLOW, computeFloorButtonMatrix } from './floor_buttons.js';
+import type { FloorButtonState } from './floor_buttons.js';
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import * as RDP from "../Common/N64/RDP.js";
 import { mat4, vec3, vec4 } from "gl-matrix";
@@ -10,7 +12,7 @@ import { mirrorZ } from "./level.js";
 import type { LevelDat, LevelObjectPlacement } from "./level.js";
 import type { LevelObjectTextureEntry } from "./level_table.js";
 import type { LevelCommand, PathAnalysis } from "./paths.js";
-import { readObjectVisibility } from "./object_startup.js";
+import { readSwitchStartupAppearance, readObjectVisibility } from "./object_startup.js";
 import { readObjectTextureAnimation } from "./object_texture_animation.js";
 import { computeObjectMotionMatrix, computeObjectShadowMotionMatrix, readObjectMotion } from "./object_motion.js";
 import { computeObjectPathMatrix, computeObjectPathShadowMatrix, readObjectPathPilot } from "./object_path.js";
@@ -134,8 +136,15 @@ function parseObjectModel(segmentBuffers: (ArrayBufferSlice | undefined)[], dlAd
     const state = new RSPStateTGR(segmentBuffers as ArrayBufferSlice[], sharedOutput);
     state.loadVerticesOnDemand = true;
     state.deinterleaveTextures = false;
-    state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH | RSP_Geometry.G_CULL_BACK | RSP_Geometry.G_LIGHTING);
-    state.gDPSetCombine(0xFCFFFFFF, 0xFFFE793C);
+    const translucent = initialOtherModeL === RENDER_TRANSLUCENT;
+    state.gSPSetGeometryMode(RSP_Geometry.G_ZBUFFER | RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH | RSP_Geometry.G_LIGHTING | (translucent ? 0 : RSP_Geometry.G_CULL_BACK));
+    if (translucent) {
+        // Preserve the source queue's primitive opacity while sampling a single mip level.
+        state.gDPSetCombine(0x127FFF, 0xFFFFF63B);
+        state.gSPSetPrimColor(0, 0, 0, 0, 128);
+    } else {
+        state.gDPSetCombine(0xFCFFFFFF, 0xFFFE793C);
+    }
     state.gDPSetOtherModeL(0, 29, initialOtherModeL);
 
     try {
@@ -250,10 +259,10 @@ function getObjectParts(entry: SSSVObjectData, state?: number): ObjectPartSpec[]
                 makeObjectPart(displayLists[1], false, null, [state === 1 ? 1 : 0x40 / 0xFF, 0, 0, 1], COMBINE_SHADE_PRIMITIVE),
             ].filter((part) => part.displayList !== undefined);
         case 19:
-            // Static unpressed button: slot 1 is the active-only glow shell.
             return [
                 makeObjectPart(displayLists[0], true),
                 makeObjectPart(0x01011B78, false, null, [0x40 / 0xFF, 0, 0, 1], COMBINE_SHADE_PRIMITIVE),
+                makeObjectPart(0x01011AB0, false, null, [1, 0, 0, 160 / 255], COMBINE_FLOOR_BUTTON_GLOW),
             ];
         case 20:
             return displayLists.map((displayList) => makeObjectPart(displayList, false, null, null, COMBINE_SHADE_PRIMITIVE));
@@ -407,7 +416,8 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
         if (entry.shadowType === 1 || entry.shadowType === 2)
             addShadow(placement, entry, motion, pathPilot);
 
-        const initialOtherModeL = entry.renderMode === 6 && (placement.unkC & 0xC0) === 0x40 ? RENDER_ALPHA : RENDER_OPAQUE;
+        const materialFlags = entry.renderMode === 6 ? placement.unkC & 0xC0 : 0;
+        const initialOtherModeL = materialFlags === 0x40 ? RENDER_ALPHA : materialFlags === 0x80 ? RENDER_TRANSLUCENT : RENDER_OPAQUE;
         const modelKey = `${entry.id}/${initialOtherModeL}/${entry.renderMode === 12 && appearance?.state === 1}`;
         let models = modelCache.get(modelKey);
         if (models === undefined) {
@@ -437,6 +447,11 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
         const contextTextureId = placement.unkC & 0x3F;
         const contextTexture = sharedOutput.textureCache.textures[contextTextureId] !== undefined ? contextTextureId : null;
 
+        const floorButton: FloorButtonState | null = entry.renderMode === 19 ? {
+            placement, scale: entry.scaleOverride || placement.scale || 2048, collideHeight: entry.collideHeight,
+            initialState: readSwitchStartupAppearance(authoredPlacement, commands)?.state ?? 0, state: 0,
+        } : null;
+        if (floorButton) floorButton.state = floorButton.initialState;
         for (const { spec, model } of models) {
             const leverHandle = entry.renderMode === 12 && spec.primColor !== null ? {
                 placement, scale: entry.scaleOverride || placement.scale || 2048, collideHeight: entry.collideHeight,
@@ -451,7 +466,7 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
                 vec3.transformMat4(transformScratch, transformScratch, matrix);
 
                 const v = new Vertex();
-                const animated = localGeometry || rotation !== null || motion !== null || pathPilot !== null || leverHandle !== null;
+                const animated = localGeometry || rotation !== null || motion !== null || pathPilot !== null || leverHandle !== null || floorButton !== null;
                 v.x = animated ? mv.x : transformScratch[0];
                 v.y = animated ? mv.y : transformScratch[1];
                 v.z = animated ? mv.z : mirrorZ(transformScratch[2]);
@@ -469,7 +484,13 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
             for (const modelDrawCall of model.output.drawCalls) {
                 const drawCall = new SSSVDrawCall();
                 drawCall.layer = SSSVLayer.Objects;
-                if (leverHandle !== null) {
+                if (floorButton !== null) {
+                    const part = spec.displayList === 0x01011AB0 ? 'glow' : spec.displayList === 0x01011B78 ? 'cap' : 'body';
+                    drawCall.floorButton = { button: floorButton, part };
+                    drawCall.modelMatrix = mat4.create();
+                    computeFloorButtonMatrix(drawCall.modelMatrix, floorButton);
+                    drawCall.visible = part !== 'glow' || floorButton.state === 1;
+                } else if (leverHandle !== null) {
                     drawCall.leverHandle = leverHandle;
                     drawCall.modelMatrix = mat4.create();
                     computeLeverHandleMatrix(drawCall.modelMatrix, leverHandle);
@@ -512,7 +533,7 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
                 } else if (spec.useContextTexture && contextTexture !== null) {
                     drawCall.textureIndices = [contextTexture];
                     drawCall.SP_TextureState.set(true, 0, 0, 0.5, 0.5);
-                    drawCall.DP_Combine = COMBINE_TEXTURED;
+                    drawCall.DP_Combine = initialOtherModeL === RENDER_TRANSLUCENT ? modelDrawCall.DP_Combine : COMBINE_TEXTURED;
                 } else {
                     drawCall.textureIndices = [];
                     drawCall.DP_Combine = COMBINE_SHADE_PRIMITIVE;
@@ -554,6 +575,14 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
                 drawCall.objectStateColor = entry.renderMode === 12 && spec.primColor !== null;
                 if (spec.primColor !== null)
                     vec4.set(drawCall.DP_PrimColor, spec.primColor[0], spec.primColor[1], spec.primColor[2], spec.primColor[3]);
+                if (drawCall.floorButton !== null) {
+                    if (drawCall.floorButton.part === 'cap') drawCall.DP_PrimColor[0] = floorButton!.state === 1 ? 1 : 64 / 255;
+                    if (drawCall.floorButton.part === 'glow') {
+                        drawCall.translucent = true; drawCall.DP_OtherModeL = 0x005049D8;
+                        drawCall.DP_OtherModeH &= ~(3 << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+                        drawCall.SP_GeometryMode &= ~(RSP_Geometry.G_LIGHTING | RSP_Geometry.G_FOG);
+                    }
+                }
                 if (spec.teleporterPart !== undefined) {
                     const state = teleporterStartup?.state ?? null;
                     const alpha = teleporterFanAlpha(placement.x, placement.y + Math.floor(runtimeHeight) + 2, placement.z, startingPlayer);

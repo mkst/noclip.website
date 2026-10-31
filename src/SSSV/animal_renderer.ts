@@ -10,6 +10,13 @@ import { sampleGroundHeight } from "./terrain_height.js";
 import type { LevelAnimalPlacement, LevelDat, LevelMapEntry } from "./level.js";
 import { DP_OTHERMODE_H, makeFogNearFar, makeLight, RENDER_OPAQUE, SSSVDrawCall, SSSVLayer } from "./terrain.js";
 import { getStaticAnimalRecipe } from "./animal_contracts.js";
+import { buildRatEyeGlows } from "./rat_eye_glows.js";
+import { fireFoxSeed, sampleFireFoxFlameScale } from "./fire_fox_effects.js";
+import { ParticleRandom } from "./script_particles.js";
+import { buildMysteryBearBalls, sampleMysteryBearBalls, sampleMysteryBearJoints } from "./mystery_bear.js";
+import { buildMysteryBearSpotlights } from "./mystery_bear_spotlights.js";
+import type { MysteryBearSpotlights } from "./mystery_bear_spotlights.js";
+import type { AnimalJoint } from "./animal_matrix.js";
 import type { AnimalModelRecipe, AnimalPartAttachment, AnimalRenderStateChange } from "./animal_contracts.js";
 import { animalMatrixFlipsWinding, computeAnimalLimbMatrix, computeAnimalPlacementMatrix, multiplyAnimalMatrices, transformAnimalNormal, writeAnimalLimbMatrix } from "./animal_matrix.js";
 import { readWoolVertices, sampleWoolVertex, WOOL_ACTIVE_OFFSET, WOOL_VERTEX_COUNT } from "./wool.js";
@@ -40,6 +47,8 @@ export interface StaticAnimalBuild {
     resolvedY: number;
     wool: AnimalWoolAnimation | null;
     tail: AnimalTailAnimation | null;
+    flame: AnimalFlameAnimation | null;
+    mysteryBear: MysteryBearAnimation | null;
     partMatrices: {
         name: string;
         matrix: mat4;
@@ -52,6 +61,52 @@ export interface StaticAnimalBuild {
     }[];
 }
 
+export interface MysteryBearAnimation {
+    root: mat4;
+    placement: Readonly<LevelAnimalPlacement>;
+    resolvedY: number;
+    targets: { vertexIndex: number; rest: Vertex; lit: boolean; part: AnimalPartAttachment; draw: SSSVDrawCall }[];
+    balls: SSSVDrawCall[];
+    spotlights: MysteryBearSpotlights | null;
+    firstVertex: number;
+    vertexCount: number;
+    lastTick: number;
+}
+
+export function updateMysteryBear(animation: MysteryBearAnimation, vertexData: Float32Array, tick: number): boolean {
+    if (animation.lastTick === tick) return false;
+    const joints = sampleMysteryBearJoints(tick);
+    const matrices = new Map<AnimalPartAttachment, mat4>();
+    const draws = new Set(animation.targets.map(t => t.draw));
+    for (const draw of draws) vec3.zero(draw.center);
+    for (const target of animation.targets) {
+        let matrix = matrices.get(target.part);
+        if (matrix === undefined) {
+            const scale = sourceScale(target.part.scale);
+            const limb = assertExists(computeAnimalLimbMatrix(joints[target.part.joints.from], joints[target.part.joints.to], {
+                scaleX: scale[0], scaleZ: scale[1], scaleY: scale[2], centerScale: 0, roll: 0,
+                mirror: target.part.mirror, orientationMode: target.part.orientationMode,
+            }));
+            matrix = mat4.create();
+            writeAnimalLimbMatrix(matrix, limb, target.part.sourceVertexAxes);
+            multiplyAnimalMatrices(matrix, animation.root, matrix);
+            matrices.set(target.part, matrix);
+        }
+        const baked = makeBakedVertex(target.rest, matrix, target.lit);
+        const offset = target.vertexIndex * 10;
+        vertexData[offset] = baked.x; vertexData[offset + 1] = baked.y; vertexData[offset + 2] = baked.z;
+        vertexData[offset + 6] = baked.c0; vertexData[offset + 7] = baked.c1; vertexData[offset + 8] = baked.c2;
+        vec3.add(target.draw.center, target.draw.center, [baked.x, baked.y, baked.z]);
+    }
+    for (const draw of draws) vec3.scale(draw.center, draw.center, 1 / draw.centerCount);
+    sampleMysteryBearBalls(animation.placement, animation.resolvedY, tick).forEach((center, i) => {
+        vec3.copy(animation.balls[i].center, center);
+        mat4.fromTranslation(animation.balls[i].modelMatrix!, center);
+    });
+    animation.lastTick = tick;
+    return true;
+}
+
 export interface AnimalWoolAnimation {
     rest: WoolVertex[];
     matrix: mat4;
@@ -59,6 +114,37 @@ export interface AnimalWoolAnimation {
     firstVertex: number;
     vertexCount: number;
     lastTick: number;
+}
+
+export interface AnimalFlameAnimation {
+    root: mat4;
+    from: AnimalJoint;
+    to: AnimalJoint;
+    placementIndex: number;
+    sourceVertexAxes: boolean;
+    targets: { vertexIndex: number; rest: Vertex; lit: boolean }[];
+    firstVertex: number;
+    vertexCount: number;
+    lastTick: number;
+}
+
+export function updateAnimalFlame(animation: AnimalFlameAnimation, vertexData: Float32Array, tick: number): boolean {
+    if (animation.lastTick === tick) return false;
+    const [scaleX, scaleZ, scaleY] = sampleFireFoxFlameScale(new ParticleRandom(fireFoxSeed(animation.placementIndex, tick)));
+    const limb = assertExists(computeAnimalLimbMatrix(animation.from, animation.to, {
+        scaleX, scaleZ, scaleY, centerScale: 0, roll: 0, mirror: 0, orientationMode: 0,
+    }));
+    const matrix = mat4.create();
+    writeAnimalLimbMatrix(matrix, limb, animation.sourceVertexAxes);
+    multiplyAnimalMatrices(matrix, animation.root, matrix);
+    for (const target of animation.targets) {
+        const baked = makeBakedVertex(target.rest, matrix, target.lit);
+        const offset = target.vertexIndex * 10;
+        vertexData[offset] = baked.x; vertexData[offset + 1] = baked.y; vertexData[offset + 2] = baked.z;
+        vertexData[offset + 6] = baked.c0; vertexData[offset + 7] = baked.c1; vertexData[offset + 8] = baked.c2;
+    }
+    animation.lastTick = tick;
+    return true;
 }
 
 export function updateAnimalWool(animation: AnimalWoolAnimation, vertexData: Float32Array, tick: number): boolean {
@@ -370,6 +456,14 @@ function buildStaticAnimalModel(
     const fogColor = colorNewFromRGBA8((dat.fogColor[0] << 24) | (dat.fogColor[1] << 16) | (dat.fogColor[2] << 8) | 0xFF);
     const light = makeLight(dat);
     const drawCalls: SSSVDrawCall[] = [];
+    const flamePart = recipe.species === "FIRE_FOX" ? assertExists(recipe.parts.find(part => part.name === "flame tail")) : null;
+    const mysteryBear: MysteryBearAnimation | null = recipe.species !== "MYSTERY_BEAR" ? null : {
+        root: rootMatrix, placement, resolvedY, targets: [], balls: [], spotlights: null, firstVertex: sharedOutput.vertices.length, vertexCount: 0, lastTick: 0,
+    };
+    const flame: AnimalFlameAnimation | null = flamePart === null ? null : {
+        root: rootMatrix, from: recipe.pose.sample.jointPositions[flamePart.joints.from], to: recipe.pose.sample.jointPositions[flamePart.joints.to],
+        placementIndex, sourceVertexAxes: flamePart.sourceVertexAxes ?? true, targets: [], firstVertex: 0, vertexCount: 0, lastTick: -1,
+    };
     let wool: AnimalWoolAnimation | null = null;
     const livingWool = placement.health > 0 && recipe.parts.some(part => part.name === "body" && part.address === 0x04002D90);
     if (livingWool) {
@@ -437,6 +531,9 @@ function buildStaticAnimalModel(
                     const baked = makeBakedVertex(sourceVertex, range.matrix, !!(sourceDrawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING));
                     outputVertexIndex = sharedOutput.vertices.length;
                     sharedOutput.vertices.push(baked);
+                    mysteryBear?.targets.push({ vertexIndex: outputVertexIndex, rest: sourceVertex, lit: !!(sourceDrawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING), part: range.part, draw: drawCall });
+                    if (flame !== null && range.part === flamePart)
+                        flame.targets.push({ vertexIndex: outputVertexIndex, rest: sourceVertex, lit: !!(sourceDrawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING) });
                     if (tail !== null && range.tailLink !== undefined)
                         tail.targets.push({ vertexIndex: outputVertexIndex, link: range.tailLink, rest: sourceVertex });
                     const woolIndex = sourceVertexIndex - WOOL_ACTIVE_OFFSET / 16;
@@ -460,6 +557,15 @@ function buildStaticAnimalModel(
     assert(drawCalls.length !== 0, "Static animal produced no draw calls");
     assert(drawCalls.some((drawCall) => (drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING) !== 0), "Animal model has no lit draws");
     assert(partMatrices.every((part) => part.drawCalls > 0 && part.triangles > 0), "Animal model has an unrendered part");
+    if (recipe.species === "RAT" || recipe.species === "KING_RAT")
+        drawCalls.push(...buildRatEyeGlows(sharedOutput, placement, resolvedY, recipe.pose.sample.jointPositions[1]));
+    if (mysteryBear !== null) {
+        mysteryBear.vertexCount = sharedOutput.vertices.length - mysteryBear.firstVertex;
+        mysteryBear.balls = buildMysteryBearBalls(sharedOutput, placement, resolvedY);
+        drawCalls.push(...mysteryBear.balls);
+        mysteryBear.spotlights = buildMysteryBearSpotlights(sharedOutput, map, placement, resolvedY, placementIndex === -1);
+        drawCalls.push(...mysteryBear.spotlights.draws);
+    }
     const textureIds = Array.from(new Set(drawCalls.flatMap(drawCall => [
         ...drawCall.textureIndices,
         ...(drawCall.animalEyeAnimation?.kind === "texture" ? drawCall.animalEyeAnimation.textureIndices : []),
@@ -473,7 +579,11 @@ function buildStaticAnimalModel(
         tail.firstVertex = Math.min(...tail.targets.map(target => target.vertexIndex));
         tail.vertexCount = Math.max(...tail.targets.map(target => target.vertexIndex)) - tail.firstVertex + 1;
     }
-    return { recipe, placement, drawCalls, textureIds, placementIndex, isPlayer: placementIndex === -1, resolvedY, partMatrices, wool, tail };
+    if (flame !== null) {
+        flame.firstVertex = Math.min(...flame.targets.map(target => target.vertexIndex));
+        flame.vertexCount = Math.max(...flame.targets.map(target => target.vertexIndex)) - flame.firstVertex + 1;
+    }
+    return { recipe, placement, drawCalls, textureIds, placementIndex, isPlayer: placementIndex === -1, resolvedY, partMatrices, wool, tail, flame, mysteryBear };
 }
 
 export function buildStaticAnimalModels(

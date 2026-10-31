@@ -1,3 +1,13 @@
+import { readLagoonMachine, LagoonMachineRuntime } from './lagoon_machine.js';
+import { LagoonMachineVisuals } from './lagoon_machine_renderer.js';
+import { readLiveAnimalSpawns, LiveAnimalSpawnRuntime } from "./live_animal_spawns.js";
+import { LiveAnimalSpawnVisuals } from "./live_animal_renderer.js";
+import { MusicPlayer } from "./music.js";
+import { readStartupMusic } from "./music_startup.js";
+import { readSnowPlatforms, SnowPlatformRuntime } from "./snow_platforms.js";
+import { SnowPlatformVisuals } from "./snow_platform_renderer.js";
+import { EmitterCommandRuntime } from "./emitter_commands.js";
+import { ObjectCommandRuntime, readObjectPrograms } from "./object_commands.js";
 import { readElevator } from "./elevator.js";
 import { buildElevatorVisuals } from "./elevator_renderer.js";
 import { buildArrivalVisuals, EntranceArrival, findArrivalEntrance } from "./arrival.js";
@@ -42,6 +52,7 @@ import { applyStartupLighting, readStartupLighting } from "./lighting.js";
 import { createTorchEmitters, ParticleSimulation, TorchSimulation } from "./particles.js";
 import { particleDefinitionFile, parseScriptParticleTextures, SCRIPT_PARTICLE_IDS, SCRIPT_PARTICLE_TEXTURE_BASE, parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "./particle_assets.js";
 import { buildStaticAnimalModels } from "./animal_renderer.js";
+import { FireFoxParticleSimulation } from "./fire_fox_effects.js";
 import type { StaticAnimalBuild } from "./animal_renderer.js";
 
 const pathBase = "SSSV";
@@ -251,11 +262,17 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
                 sharedOutput.textureCache.textures[a.textureIdBase + i] = textures[i];
         }
         const emitterAnalysis = readPersistentEmitters(objectPlacements, objectTable, commands);
+        const fireFoxBuilds = animalStaticBuilds.filter(build => build.flame !== null);
+        let fireFoxParticles: FireFoxParticleSimulation | null = null;
         let scriptSimulation: ScriptParticleSimulation | null = null;
-        if (emitterAnalysis.emitters.length !== 0) {
+        if (emitterAnalysis.emitters.length !== 0 || fireFoxBuilds.length !== 0) {
             const definitions = new Map(await Promise.all(SCRIPT_PARTICLE_IDS.map(async (id) =>
                 [id, parseParticleDefinition(await dataFetcher.fetchData(`${pathBase}/${particleDefinitionFile(id)}`))] as const)));
-            scriptSimulation = new ScriptParticleSimulation(emitterAnalysis.emitters, definitions, map, dat, emitterAnalysis.provenance);
+            const emitterPrograms = new EmitterCommandRuntime(emitterAnalysis.emitters, commands, playerPlacement);
+            if (emitterAnalysis.emitters.length !== 0)
+                scriptSimulation = new ScriptParticleSimulation(emitterPrograms.emitters, definitions, map, dat, emitterAnalysis.provenance, emitterPrograms);
+            if (fireFoxBuilds.length !== 0)
+                fireFoxParticles = new FireFoxParticleSimulation(fireFoxBuilds, definitions, map, dat);
             for (const [i, texture] of parseScriptParticleTextures(segment1).entries())
                 sharedOutput.textureCache.textures[SCRIPT_PARTICLE_TEXTURE_BASE + i] = texture;
         }
@@ -284,6 +301,15 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
             for (const [i, texture] of parseScriptParticleTextures(segment1).entries())
                 sharedOutput.textureCache.textures[SCRIPT_PARTICLE_TEXTURE_BASE + i] = texture;
         }
+        const liveSpawnConfig = readLiveAnimalSpawns(objectPlacements, commands, map, playerPlacement);
+        const liveAnimalSpawns = liveSpawnConfig !== null ? new LiveAnimalSpawnVisuals(new LiveAnimalSpawnRuntime(liveSpawnConfig), sharedOutput, animalStaticBuilds) : null;
+        if (liveAnimalSpawns !== null) drawCalls.push(...liveAnimalSpawns.drawCalls);
+        const machineConfig = readLagoonMachine(objectPlacements, commands, objectTable, links, findPayload(payloads, LevelPayloadType.Rng), playerPlacement);
+        const lagoonMachine = machineConfig !== null ? new LagoonMachineVisuals(new LagoonMachineRuntime(machineConfig), drawCalls, fences) : null;
+        const snowConfig = readSnowPlatforms(objectPlacements, commands, objectTable, paths, links);
+        const snowPlatforms = snowConfig !== null ? new SnowPlatformVisuals(new SnowPlatformRuntime(snowConfig), drawCalls) : null;
+        const objectPrograms = readObjectPrograms(objectPlacements, commands, objectTable);
+        const objectCommands = objectPrograms.length ? new ObjectCommandRuntime(objectPrograms, commands, objectTable, drawCalls) : null;
         const elevatorConfig = readElevator(objectPlacements, commands, objectTable, map);
         const elevator = elevatorConfig !== null ? buildElevatorVisuals(sharedOutput, elevatorConfig, segmentBuffers, dat, drawCalls) : null;
         if (elevator !== null) drawCalls.push(...elevator.drawCalls);
@@ -292,7 +318,7 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
             new EntranceArrival(arrivalEntrance.placement, arrivalEntrance.index,
                 parseParticleDefinition(await dataFetcher.fetchData(`${pathBase}/${particleDefinitionFile(35)}`)), map), segment1) : null;
         if (arrival !== null) drawCalls.push(arrival.draw);
-        const particleSimulation = torchSimulation !== null || scriptSimulation !== null || levelEvents !== null || rain !== null || arrival !== null ? new ParticleSimulation(torchSimulation, torchDefinition, scriptSimulation, levelEvents?.simulation, rain, arrival?.simulation) : null;
+        const particleSimulation = torchSimulation !== null || scriptSimulation !== null || levelEvents !== null || rain !== null || arrival !== null || fireFoxParticles !== null ? new ParticleSimulation(torchSimulation, torchDefinition, scriptSimulation, levelEvents?.simulation, rain, arrival?.simulation, fireFoxParticles) : null;
         if (skyMode === 0)
             drawCalls.push(...buildStarfield(sharedOutput, dat));
         applyStartupLighting(drawCalls, readStartupLighting(commands, objectPlacements, animalPlacements));
@@ -306,8 +332,10 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
         const clearColor = skyMode === 0 ? colorNewFromRGBA(0, 0, 0, 1) : colorNewFromRGBA(0.88, 0.88, 0.88, 1);
         const [fogNear, fogFar] = makeFogNearFar(dat);
         const fogColor = colorNewFromRGBA8((dat.fogColor[0] << 24) | (dat.fogColor[1] << 16) | (dat.fogColor[2] << 8) | 0xFF);
-        const renderer = new SSSVRenderer(device, sharedOutput, drawCalls, fences, this.name, geometry.faces.length, initialWorldMatrix, clearColor, animalMarkers, hangingRibbons, fogNear, fogFar, fogColor, new PathOverlay(pathAnalysis, map), particleSimulation, animalStaticBuilds, animalSpawnMarkers, levelEvents, rain, fenceSwitch, objectMarkers, arrival, elevator);
+        const renderer = new SSSVRenderer(device, sharedOutput, drawCalls, fences, this.name, geometry.faces.length, initialWorldMatrix, clearColor, animalMarkers, hangingRibbons, fogNear, fogFar, fogColor, new PathOverlay(pathAnalysis, map), particleSimulation, animalStaticBuilds, animalSpawnMarkers, levelEvents, rain, fenceSwitch, objectMarkers, arrival, elevator, objectCommands, snowPlatforms, liveAnimalSpawns, lagoonMachine);
         renderer.installButtonInput(context.inputManager.toplevel, context.viewerInput.camera);
+        renderer.music = new MusicPlayer(dataFetcher, readStartupMusic(commands, objectPlacements, animalPlacements));
+        void renderer.music.initialize();
         return renderer;
     }
 }

@@ -10,6 +10,13 @@ export function commandFailure(reason: string, kind: CommandFailureKind = "unsup
 }
 
 export interface CommandHost {
+    executePathCommand?(target: CommandEntityId | null, opcode: number, payload: DataView): CommandResult<"wait" | "yield" | "continue">;
+    assignReference?(owner: CommandEntityId, target: CommandEntityId | null, payload: DataView): CommandResult<void>;
+    spawnAnimal?(owner: CommandEntityId, payload: DataView, commandIndex: number): CommandResult<boolean>;
+    executeViewerCommand?(owner: CommandEntityId, target: CommandEntityId | null, opcode: number, payload: DataView): CommandResult<void>;
+    assignProgram?(owner: CommandEntityId, target: CommandEntityId | null, scriptBase: number): CommandResult<void>;
+    executeEffectCommand?(target: CommandEntityId | null, opcode: number, payload: DataView): CommandResult<void>;
+    executeEmitterCommand?(target: CommandEntityId | null, opcode: number, payload: DataView): CommandResult<void>;
     executeObjectCommand?(owner: CommandEntityId, target: CommandEntityId | null, opcode: number, payload: DataView): CommandResult<void>;
     resolveReference(owner: CommandEntityId, selected: CommandEntityId | null, reference: number, region: number): CommandResult<CommandEntityId | null>;
     readOperand(entity: CommandEntityId | null, operand: number): CommandResult<number>;
@@ -87,7 +94,7 @@ export function commandMath(left: number, operation: number, right: number): Com
     }
 }
 
-type InstructionResult = { kind: "continue"; cursor?: number } | { kind: "wait"; reason: string; cursor?: number } | { kind: "stop" }
+type InstructionResult = { kind: "yield"; reason: string } | { kind: "continue"; cursor?: number } | { kind: "wait"; reason: string; cursor?: number } | { kind: "stop" }
     | { kind: "failure"; reason: string; diagnosticKind: CommandDiagnosticKind };
 
 export class CommandVM {
@@ -207,6 +214,9 @@ export class CommandVM {
                 // Both command cursor stores and the runner's increment are eight-bit.
                 this.cursor = ((result.cursor ?? this.cursor) + 1) & 255;
                 this.instruction = null;
+            } else if (result.kind === "yield") {
+                this.cursor = (this.cursor + 1) & 255; this.instruction = null;
+                this.status = "waiting"; this.waitReason = result.reason;
             } else if (result.kind === "wait") {
                 if (result.cursor !== undefined) { this.cursor = result.cursor; this.instruction = null; }
                 this.status = "waiting"; this.waitReason = result.reason;
@@ -276,17 +286,41 @@ export class CommandVM {
             this.delayCounter = ((previous - 1) << 16) >> 16;
             return previous < 1 ? { kind: "continue" } : { kind: "wait", reason: `Delay (${previous} ticks remaining)` };
         }
+        case 0x07: return { kind: "wait", reason: "Waiting for a deferred condition" };
         case 0x08: return { kind: "continue", cursor: p.getInt16(0) & 255 };
         case 0x09: return { kind: "stop" };
+        case 0x0E: {
+            const base = p.getUint16(0);
+            if (this.commands[base] === undefined) return { kind: "failure", diagnosticKind: "invalid-data", reason: "Program handoff outside command bank" };
+            if (this.target === this.owner) {
+                this.scriptBase = base; this.deferred = []; this.loopCounter = this.loopCursor = this.delayCounter = 0;
+                this.target = this.owner; this.targetReference = 0;
+                return { kind: "continue", cursor: 255 };
+            }
+            const result = this.host.assignProgram?.(this.owner, this.target, base) ?? commandFailure("Foreign program assignment requires a scheduler");
+            return result.ok ? { kind: "continue" } : failed(result);
+        }
+        case 0x13:
+        case 0x18:
+        case 0x31:
+        case 0x47:
+        case 0x5B: {
+            const result = this.host.executeEffectCommand?.(this.target, opcode, p) ?? commandFailure(`Effect capability required for opcode 0x${opcode.toString(16)}`);
+            if (!result.ok) return failed(result);
+            return opcode === 0x13 && this.target === this.owner ? { kind: "wait", reason: "Owner removed" } : { kind: "continue" };
+        }
         case 0x0F: {
             const result = this.host.setState(this.target, p.getUint16(0));
             return result.ok ? { kind: "continue" } : failed(result);
         }
         case 0x10:
+        case 0x19:
+        case 0x1B:
         case 0x1C:
         case 0x32:
         case 0x33:
-        case 0x36: {
+        case 0x36:
+        case 0x57: {
             const result = this.host.executeObjectCommand?.(this.owner, this.target, opcode, p)
                 ?? commandFailure(`Object capability required for opcode 0x${opcode.toString(16)}`);
             return result.ok ? { kind: "continue" } : failed(result);
@@ -297,6 +331,50 @@ export class CommandVM {
             if (!result.ok) return failed(result);
             this.target = result.value; this.targetReference = reference & 255;
             return { kind: "continue" };
+        }
+        case 0x1D:
+        case 0x34: {
+            const result = this.host.executePathCommand?.(this.target, opcode, p) ?? commandFailure("Path capability required");
+            if (!result.ok) return failed(result);
+            return result.value === "wait" ? { kind: "wait", reason: "Approaching path start" }
+                : result.value === "yield" ? { kind: "yield", reason: "Path started" } : { kind: "continue" };
+        }
+        case 0x56: {
+            const result = this.host.assignReference?.(this.owner, this.target, p) ?? commandFailure("Reference assignment capability required");
+            return result.ok ? { kind: "continue" } : failed(result);
+        }
+        case 0x60: {
+            const result = this.host.spawnAnimal?.(this.owner, p, this.scriptBase + this.cursor) ?? commandFailure("Animal spawning capability required");
+            if (!result.ok) return failed(result);
+            return result.value ? { kind: "continue" } : { kind: "wait", reason: "Animal capacity unavailable" };
+        }
+        case 0x23:
+        case 0x2A:
+        case 0x4C:
+        case 0x2E:
+        case 0x39:
+        case 0x42:
+        case 0x43:
+        case 0x4A:
+        case 0x4D:
+        case 0x53: {
+            const result = this.host.executeViewerCommand?.(this.owner, this.target, opcode, p) ?? commandFailure(`Viewer capability required for opcode 0x${opcode.toString(16)}`);
+            return result.ok ? { kind: "continue" } : failed(result);
+        }
+        case 0x15:
+        case 0x16:
+        case 0x17:
+        case 0x64: {
+            const result = this.host.executeEmitterCommand?.(this.target, opcode, p)
+                ?? commandFailure(`Emitter capability required for opcode 0x${opcode.toString(16)}`);
+            return result.ok ? { kind: "continue" } : failed(result);
+        }
+        case 0x65: {
+            if (p.getUint8(1) !== 0) return { kind: "failure", diagnosticKind: "unsupported", reason: `Unsupported unary operation ${p.getUint8(1)}` };
+            const operand = this.host.readOperand(this.target, p.getInt16(2));
+            if (!operand.ok) return failed(operand);
+            const result = this.host.writeVariable(this.target, p.getUint8(0), Math.abs(operand.value) | 0);
+            return result.ok ? { kind: "continue" } : failed(result);
         }
         case 0x26: {
             const result = this.host.playSound(this.target, p);

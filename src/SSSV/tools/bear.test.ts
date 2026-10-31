@@ -1,6 +1,6 @@
 import { deepEqual, equal } from "node:assert/strict";
 import { test } from "node:test";
-import { BEAR_STATIC_RECIPE } from "../animals/bear.js";
+import { BEAR_STATIC_RECIPE, MYSTERY_BEAR_STATIC_RECIPE } from "../animals/bear.js";
 import { getStaticAnimalRecipe } from "../animal_contracts.js";
 import { ANIMAL_EYE_ATLASES, sampleAnimalEyeFrame } from "../animal_eyes.js";
 
@@ -17,8 +17,27 @@ test("BEAR uses the standing source branches rather than a frozen walk sample", 
     });
     equal(getStaticAnimalRecipe({ id: 22, health: 1 }), BEAR_STATIC_RECIPE);
     for (const id of [22, 23, 24]) equal(getStaticAnimalRecipe({ id, health: 0 }), null);
-    for (const id of [23, 24]) equal(getStaticAnimalRecipe({ id, health: 127 }), null);
+    equal(getStaticAnimalRecipe({ id: 23, health: 127 }), null);
     deepEqual(BEAR_STATIC_RECIPE.pose.sample.scaleInputs.outerMatrixAxis16_16, [0x4000, 0x4000, 0x4000]);
+});
+
+test("MYSTERY_BEAR holds the source tick-zero floating pose and its distinct attachments", () => {
+    equal(getStaticAnimalRecipe({ id: 24, health: 127 }), MYSTERY_BEAR_STATIC_RECIPE);
+    equal(getStaticAnimalRecipe({ id: 24, health: -1 }), null);
+    // Decompiled B9A5C, update_limbs_mystery_bear and C652C executed with
+    // original mtx.h lookup tables, state 2, flat support and global tick 0.
+    deepEqual(Object.entries(MYSTERY_BEAR_STATIC_RECIPE.pose.sample.jointPositions).map(([id, p]) => [Number(id), p.x, p.z, p.y]), [
+        [0, 0, 0, 2722], [1, 0, 0, 4018], [2, 0, 0, 1426],
+        [7, 1037, 0, 4018], [8, 1037, 1932, 2714],
+        [10, -1037, 0, 4018], [11, -1037, 2324, 4018],
+        [19, 0, 43, 4138], [20, 0, 821, 4138], [26, 0, 0, 0], [27, 0, 0, 1426],
+    ]);
+    deepEqual(MYSTERY_BEAR_STATIC_RECIPE.parts.map(p => [p.address, p.joints.from, p.joints.to, p.mirror]), [
+        [0x040082C0, 1, 2, 0], [0x04007BC0, 1, 20, 0],
+        [0x040077C0, 7, 8, 0], [0x040077C0, 10, 11, 1], [0x04009540, 27, 26, 0],
+        [0x04008490, 1, 20, 0], [0x040084A8, 1, 20, 0],
+    ]);
+    equal(MYSTERY_BEAR_STATIC_RECIPE.eyes, "eyes6");
 });
 
 test("BEAR keeps its eight source attachments, part scales and mirrored limbs", () => {
