@@ -1,4 +1,4 @@
-import type { AnimalModelRecipe, AnimalPartAttachment } from "../animal_contracts.js";
+import type { AnimalModelRecipe, AnimalPartAttachment } from "./animal_contracts.js";
 import { HYENA_STATIC_RECIPE } from "./hyena.js";
 
 function part(order: number, name: string, address: number, from: number, to: number, mirror: 0 | 1 = 0): AnimalPartAttachment {

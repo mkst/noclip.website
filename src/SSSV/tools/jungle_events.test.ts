@@ -2,11 +2,11 @@ import { deepEqual, equal, ok } from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { BoulderEventSimulation, jungleLaunchVelocity, readBoulderEvent } from "../level_events.js";
-import type { BoulderEventConfig } from "../level_events.js";
-import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseMap, parseObjects } from "../level.js";
-import { LEVEL_EVENT_PARTICLE_IDS, parseParticleDefinition } from "../particle_assets.js";
-import { parseCommands } from "../paths.js";
+import { BoulderEventSimulation, jungleLaunchVelocity, readBoulderEvent } from "../effects/level_events.js";
+import type { BoulderEventConfig } from "../effects/level_events.js";
+import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseMap, parseObjects } from "../core/level.js";
+import { LEVEL_EVENT_PARTICLE_IDS, parseParticleDefinition } from "../effects/particle_assets.js";
+import { parseCommands } from "../commands/paths.js";
 
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));
 const available = existsSync("data/SSSV/levels/JUNGLE_DOLDRUMS.bin");

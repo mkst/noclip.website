@@ -4,11 +4,11 @@ import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import { HUSKY_STATIC_RECIPE } from "../animals/husky.js";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
-import { buildStaticAnimalModels } from "../animal_renderer.js";
-import { advanceAnimalTail, createAnimalTail } from "../animal_tails.js";
-import { sampleAnimalEyeFrame } from "../animal_eyes.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap } from "../level.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
+import { buildStaticAnimalModels } from "../animals/animal_renderer.js";
+import { advanceAnimalTail, createAnimalTail } from "../animals/animal_tails.js";
+import { sampleAnimalEyeFrame } from "../animals/animal_eyes.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap } from "../core/level.js";
 
 (globalThis as any).window = { debug: false };
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));

@@ -2,9 +2,9 @@ import { deepStrictEqual, equal, ok, throws } from "node:assert/strict";
 import { test } from "node:test";
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { analyzePathUses, parseCommands } from "../paths.js";
-import type { LevelCommand } from "../paths.js";
-import type { LevelPath } from "../level.js";
+import { analyzePathUses, parseCommands } from "../commands/paths.js";
+import type { LevelCommand } from "../commands/paths.js";
+import type { LevelPath } from "../core/level.js";
 
 function bank(...records: number[][]): LevelCommand[] {
     const bytes = Uint8Array.from([0, 0, ...records.flatMap(([opcode, ...payload]) => [opcode >> 8, opcode & 255, ...Array.from({ length: 8 }, (_, i) => payload[i] ?? 0)])]);
@@ -162,7 +162,7 @@ test("chained conditions explore both the next condition and the chain skip", ()
 });
 
 test("display variants apply each consumer's offsets and mirror Z exactly once", async () => {
-    const { createPathDisplayVariants } = await import("../paths.js");
+    const { createPathDisplayVariants } = await import("../commands/paths.js");
     const path: LevelPath = { index: 9, waypoints: [{ x: 1, z: 2, y: 3 }, { x: 255, z: 128, y: 0 }] };
     const analysis = { paths: [{ path, roles: ["camera", "animal", "object", "unresolved"] as const, uses: [] }], invalidUses: [], diagnostics: [], unresolvedCommandCount: 0 };
     const result = createPathDisplayVariants({ ...analysis, paths: [{ ...analysis.paths[0], roles: [...analysis.paths[0].roles] }] });
@@ -177,7 +177,7 @@ test("display variants apply each consumer's offsets and mirror Z exactly once",
 });
 
 test("unclassified, empty and single-point paths retain display IDs and authored heights", async () => {
-    const { createPathDisplayVariants } = await import("../paths.js");
+    const { createPathDisplayVariants } = await import("../commands/paths.js");
     const analysis = analyzePathUses([
         { index: 0, waypoints: [] },
         { index: 1, waypoints: [{ x: 0, z: 0, y: 0 }] },

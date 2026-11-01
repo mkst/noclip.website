@@ -1,23 +1,19 @@
-import { readLagoonMachine, LagoonMachineRuntime } from './lagoon_machine.js';
-import { LagoonMachineVisuals } from './lagoon_machine_renderer.js';
-import { readLiveAnimalSpawns, LiveAnimalSpawnRuntime } from "./live_animal_spawns.js";
-import { LiveAnimalSpawnVisuals } from "./live_animal_renderer.js";
-import { MusicPlayer } from "./music.js";
-import { readStartupMusic } from "./music_startup.js";
-import { readSnowPlatforms, SnowPlatformRuntime } from "./snow_platforms.js";
-import { SnowPlatformVisuals } from "./snow_platform_renderer.js";
-import { EmitterCommandRuntime } from "./emitter_commands.js";
-import { ObjectCommandRuntime, readObjectPrograms } from "./object_commands.js";
-import { readElevator } from "./elevator.js";
-import { buildElevatorVisuals } from "./elevator_renderer.js";
-import { buildArrivalVisuals, EntranceArrival, findArrivalEntrance } from "./arrival.js";
-import { FenceSwitchRuntime, readFenceSwitch } from "./fence_switch.js";
-import { buildLampGlows, buildLeverLights, buildSwitchBalls } from "./switch_visuals.js";
-import { buildObjectMarkers, createObjectMarkers } from "./object_markers.js";
-import { readRainButton } from "./buttons.js";
-import { RainSimulation, RAIN_TEXTURE_ID } from "./rain.js";
-import { readPersistentEmitters } from "./particle_emitters.js";
-import { ScriptParticleSimulation } from "./script_particles.js";
+import { LagoonMachineRuntime } from './objects/lagoon_machine.js';
+import { LagoonMachineVisuals } from './objects/lagoon_machine_renderer.js';
+import { LiveAnimalSpawnRuntime } from "./animals/live_animal_spawns.js";
+import { LiveAnimalSpawnVisuals } from "./animals/live_animal_renderer.js";
+import { MusicPlayer } from "./audio/music.js";
+import { SnowPlatformRuntime } from "./objects/snow_platforms.js";
+import { SnowPlatformVisuals } from "./objects/snow_platform_renderer.js";
+import { EmitterCommandRuntime } from "./effects/emitter_commands.js";
+import { ObjectCommandRuntime, readObjectPrograms } from "./objects/object_commands.js";
+import { buildElevatorVisuals } from "./objects/elevator_renderer.js";
+import { buildArrivalVisuals, EntranceArrival } from "./effects/arrival.js";
+import { FenceSwitchRuntime } from "./objects/fence_switch.js";
+import { buildLampGlows, buildLeverLights, buildSwitchBalls } from "./objects/switch_visuals.js";
+import { buildObjectMarkers, createObjectMarkers } from "./objects/object_markers.js";
+import { RainSimulation, RAIN_TEXTURE_ID } from "./effects/rain.js";
+import { ScriptParticleSimulation } from "./effects/script_particles.js";
 import * as Viewer from "../viewer.js";
 import * as RDP from "../Common/N64/RDP.js";
 
@@ -26,34 +22,35 @@ import type { SceneContext } from "../SceneBase.js";
 import type { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { RSPSharedOutput } from "../BanjoKazooie/f3dex.js";
 import { assertExists } from "../util.js";
-import { BIOME_REGULAR_TEXTURES, BIOME_SEGMENTS, getLevelRegularTextureBank, LEVELS, LEVEL_OBJECT_TEXTURES, LEVEL_SEGMENT_ALIASES, WATER_TEXTURE } from "./level_table.js";
-import type { LevelEntry, RegularBankEntry } from "./level_table.js";
-import { formatLevelName } from "./manifest.js";
-import { findPayload, LevelPayloadType, mirrorZ, parseAnimals, parseCameraSkyMode, parseGeometry, parseHangingObjects, parseLevelContainer, parseLevelDat, parseLinks, parseMap, parseObjects, parsePaths, parseScrollingTable } from "./level.js";
-import { parseI4Texture, parseI8Texture, parseMipmapBank, parseRegularBank } from "./texture.js";
-import { buildMap, buildTerrain, buildWater, installTerrainAnimationTextures, makeFogNearFar, SSSVLayer } from "./terrain.js";
-import { BIOME_REGULAR_TEXTURE_ID_BASE, buildBillboards, buildObjects, indexObjectTable, installDynamicBillboardTextures, installReflectionTextures, installShadowTextures, installTeleporterTextures, LEVEL_REGULAR_TEXTURE_ID_BASE, parseObjectTable, parseObjectTextureBank } from "./objects.js";
-import type { SSSVBillboard } from "./objects.js";
-import { SSSVRenderer } from "./render.js";
+import { BIOME_REGULAR_TEXTURES, getLevelRegularTextureBank, LEVELS, LEVEL_OBJECT_TEXTURES, WATER_TEXTURE } from "./core/level_table.js";
+import type { LevelEntry, RegularBankEntry } from "./core/level_table.js";
+import { formatLevelName } from "./core/manifest.js";
+import { mirrorZ, parseLevelContainer } from "./core/level.js";
+import { prepareLevel, prepareLevelFeatures } from "./core/level_preparation.js";
+import { parseI4Texture, parseI8Texture, parseMipmapBank, parseRegularBank } from "./core/texture.js";
+import { buildMap, buildTerrain, buildWater, installTerrainAnimationTextures, makeFogNearFar, SSSVLayer } from "./render/terrain.js";
+import { applyStartupFanAnimation } from "./effects/terrain_fans.js";
+import { BIOME_REGULAR_TEXTURE_ID_BASE, buildBillboards, buildObjects, indexObjectTable, installDynamicBillboardTextures, installReflectionTextures, installShadowTextures, installTeleporterTextures, LEVEL_REGULAR_TEXTURE_ID_BASE, parseObjectTable, parseObjectTextureBank } from "./objects/objects.js";
+import type { SSSVBillboard } from "./objects/objects.js";
+import { SSSVRenderer } from "./render/render.js";
 import { mat4 } from "gl-matrix";
 import { colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
-import { buildStarfield, installStarTexture } from "./stars.js";
-import { installFenceTexture, resolveFenceSpans } from "./fences.js";
-import { buildAnimalMarkers, createAnimalMarkers, createPlayerPlacement } from "./animals.js";
-import { createAnimalSpawnMarkers, readAbsoluteAnimalSpawns } from "./animal_spawns.js";
-import { BoulderEventSimulation, readBoulderEvent } from "./level_events.js";
-import { buildBoulderEventVisuals } from "./level_event_renderer.js";
-import type { BoulderEventVisuals } from "./level_event_renderer.js";
-import { LEVEL_EVENT_PARTICLE_IDS, LEVEL_EVENT_TEXTURE_BASE, parseLevelEventParticleTextures } from "./particle_assets.js";
-import { buildHangingRibbons, installHangingTextures } from "./hanging.js";
-import { analyzePathUses, parseCommands } from "./paths.js";
-import { PathOverlay } from "./path_overlay.js";
-import { applyStartupLighting, readStartupLighting } from "./lighting.js";
-import { createTorchEmitters, ParticleSimulation, TorchSimulation } from "./particles.js";
-import { particleDefinitionFile, parseScriptParticleTextures, SCRIPT_PARTICLE_IDS, SCRIPT_PARTICLE_TEXTURE_BASE, parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "./particle_assets.js";
-import { buildStaticAnimalModels } from "./animal_renderer.js";
-import { FireFoxParticleSimulation } from "./fire_fox_effects.js";
-import type { StaticAnimalBuild } from "./animal_renderer.js";
+import { buildStarfield, installStarTexture } from "./render/stars.js";
+import { installFenceTexture } from "./objects/fences.js";
+import { buildAnimalMarkers } from "./animals/animals.js";
+import { BoulderEventSimulation } from "./effects/level_events.js";
+import { buildBoulderEventVisuals } from "./effects/level_event_renderer.js";
+import type { BoulderEventVisuals } from "./effects/level_event_renderer.js";
+import { LEVEL_EVENT_PARTICLE_IDS, LEVEL_EVENT_TEXTURE_BASE, parseLevelEventParticleTextures } from "./effects/particle_assets.js";
+import { buildHangingRibbons, installHangingTextures } from "./objects/hanging.js";
+import { PathOverlay } from "./ui/path_overlay.js";
+import { applyStartupLighting } from "./render/lighting.js";
+import type { ParticleSource } from "./effects/particles.js";
+import { createParticleSpriteSource, createTorchParticleSource, ParticleSimulation, TorchSimulation } from "./effects/particles.js";
+import { particleDefinitionFile, parseScriptParticleTextures, SCRIPT_PARTICLE_IDS, SCRIPT_PARTICLE_TEXTURE_BASE, SCRIPT_PARTICLE_TEXTURE_OFFSETS, parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "./effects/particle_assets.js";
+import { buildStaticAnimalModels } from "./animals/animal_renderer.js";
+import { FireFoxParticleSimulation } from "./animals/fire_fox_effects.js";
+import type { StaticAnimalBuild } from "./animals/animal_renderer.js";
 
 const pathBase = "SSSV";
 const WATER_TEXTURE_ID = 300;
@@ -141,34 +138,11 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
         const levelData = await dataFetcher.fetchData(`${pathBase}/levels/${this.id}.bin`);
         const payloads = parseLevelContainer(levelData);
 
-        const datData = assertExists(findPayload(payloads, LevelPayloadType.Dat), "SSSV dat");
-        const geoData = assertExists(findPayload(payloads, LevelPayloadType.Geo), "SSSV geo");
-        const dat = parseLevelDat(datData);
-        const geometry = parseGeometry(geoData, dat);
-        const scrollingData = findPayload(payloads, LevelPayloadType.Unknown14);
-        const scrollingTable = scrollingData !== null ? parseScrollingTable(scrollingData) : null;
-        const cameraData = findPayload(payloads, LevelPayloadType.Cam);
-        const skyMode = cameraData !== null ? parseCameraSkyMode(cameraData) : 2;
-        const linkData = findPayload(payloads, LevelPayloadType.Joi);
-        const links = linkData !== null ? parseLinks(linkData) : [];
-        const mapData = assertExists(findPayload(payloads, LevelPayloadType.Map), "SSSV map");
-        const map = parseMap(mapData);
-        const objectData = assertExists(findPayload(payloads, LevelPayloadType.Cob), "SSSV objects");
-        const objectPlacements = parseObjects(objectData);
-        const hangingData = findPayload(payloads, LevelPayloadType.Cha);
-        const hangingPlacements = hangingData !== null ? parseHangingObjects(hangingData) : [];
-        const animalData = findPayload(payloads, LevelPayloadType.Can);
-        const animalPlacements = animalData !== null ? parseAnimals(animalData) : [];
-        const playerPlacement = createPlayerPlacement(dat, objectPlacements);
-        const animalMarkers = createAnimalMarkers(animalPlacements, playerPlacement);
-        const paths = parsePaths(findPayload(payloads, LevelPayloadType.Paf));
-        const commands = parseCommands(findPayload(payloads, LevelPayloadType.Cmd));
-        const animalSpawns = readAbsoluteAnimalSpawns(commands);
-        const animalSpawnMarkers = createAnimalSpawnMarkers(animalSpawns, map);
-        const boulderEvent = readBoulderEvent(objectPlacements, commands, findPayload(payloads, LevelPayloadType.Rng));
-        const pathAnalysis = analyzePathUses(paths, commands, objectPlacements, animalPlacements, links);
-        const biome = BIOME_SEGMENTS[dat.segment] ?? null;
-        const levelSegmentName = LEVEL_SEGMENT_ALIASES[this.id] ?? this.id;
+        const level = prepareLevel(payloads, this.id);
+        const { dat, geometry, scrollingTable, skyMode, map, objectPlacements, hangingPlacements,
+            animalPlacements, playerPlacement, animalMarkers, commands, animalSpawns, animalSpawnMarkers,
+            boulderEvent, pathAnalysis, biome, levelSegmentName, rainButton, arrivalEntrance,
+            startupLighting, startupMusic } = level;
 
         const banks = await loadTextureBanks(context, biome, this.entry.textureBank, getLevelRegularTextureBank(dat.segment, dat.textureBank));
         const sharedOutput = new RSPSharedOutput();
@@ -192,8 +166,8 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
         if (hangingPlacements.length !== 0)
             installHangingTextures(sharedOutput, segment1);
         const objectTable = indexObjectTable(parseObjectTable(objectTableData));
-        const fences = resolveFenceSpans(objectPlacements, objectTable, links);
-        const fenceConfig = readFenceSwitch(objectPlacements, commands, links, findPayload(payloads, LevelPayloadType.Rng), fences);
+        const { fences, fenceConfig, torchEmitters, emitterAnalysis, liveSpawnConfig,
+            machineConfig, snowConfig, elevatorConfig } = prepareLevelFeatures(level, objectTable);
         const fenceSwitch = fenceConfig !== null ? new FenceSwitchRuntime(fenceConfig, objectPlacements, animalPlacements) : null;
         fenceSwitch?.setEnabled(true);
         const objectTextures = levelSegment !== undefined ? parseObjectTextureBank(levelSegment, LEVEL_OBJECT_TEXTURES[levelSegmentName] ?? []) : [];
@@ -206,6 +180,7 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
         segmentBuffers[0x05] = levelSegment;
 
         const drawCalls = buildTerrain(sharedOutput, geometry, dat, scrollingTable);
+        applyStartupFanAnimation(drawCalls, objectPlacements, commands);
         let animalStaticBuilds: StaticAnimalBuild[] = [];
         const water = buildWater(sharedOutput, map, dat, WATER_TEXTURE_ID);
         if (water !== null)
@@ -246,7 +221,6 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
             drawCalls.push(draw);
         }
         const hangingRibbons = buildHangingRibbons(hangingPlacements, objectPlacements, map);
-        const torchEmitters = createTorchEmitters(objectPlacements, objectTable);
         let torchSimulation: TorchSimulation | null = null;
         let torchDefinition = null;
         if (torchEmitters.length !== 0) {
@@ -261,7 +235,6 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < textures.length; i++)
                 sharedOutput.textureCache.textures[a.textureIdBase + i] = textures[i];
         }
-        const emitterAnalysis = readPersistentEmitters(objectPlacements, objectTable, commands);
         const fireFoxBuilds = animalStaticBuilds.filter(build => build.flame !== null);
         let fireFoxParticles: FireFoxParticleSimulation | null = null;
         let scriptSimulation: ScriptParticleSimulation | null = null;
@@ -293,7 +266,6 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
         drawCalls.push(...buildSwitchBalls(sharedOutput, objectPlacements, objectTable, dat, commands));
         drawCalls.push(...buildLeverLights(sharedOutput, objectPlacements, objectTable, dat, commands));
         drawCalls.push(...buildLampGlows(sharedOutput, objectPlacements, objectTable, dat, commands));
-        const rainButton = readRainButton(objectPlacements, commands);
         const rain = rainButton !== null ? new RainSimulation(rainButton, map, dat) : null;
         if (rain !== null) {
             rain.setEnabled(true);
@@ -301,27 +273,31 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
             for (const [i, texture] of parseScriptParticleTextures(segment1).entries())
                 sharedOutput.textureCache.textures[SCRIPT_PARTICLE_TEXTURE_BASE + i] = texture;
         }
-        const liveSpawnConfig = readLiveAnimalSpawns(objectPlacements, commands, map, playerPlacement);
         const liveAnimalSpawns = liveSpawnConfig !== null ? new LiveAnimalSpawnVisuals(new LiveAnimalSpawnRuntime(liveSpawnConfig), sharedOutput, animalStaticBuilds) : null;
         if (liveAnimalSpawns !== null) drawCalls.push(...liveAnimalSpawns.drawCalls);
-        const machineConfig = readLagoonMachine(objectPlacements, commands, objectTable, links, findPayload(payloads, LevelPayloadType.Rng), playerPlacement);
         const lagoonMachine = machineConfig !== null ? new LagoonMachineVisuals(new LagoonMachineRuntime(machineConfig), drawCalls, fences) : null;
-        const snowConfig = readSnowPlatforms(objectPlacements, commands, objectTable, paths, links);
         const snowPlatforms = snowConfig !== null ? new SnowPlatformVisuals(new SnowPlatformRuntime(snowConfig), drawCalls) : null;
-        const objectPrograms = readObjectPrograms(objectPlacements, commands, objectTable);
+        const objectPrograms = readObjectPrograms(objectPlacements, commands, objectTable, drawCalls);
         const objectCommands = objectPrograms.length ? new ObjectCommandRuntime(objectPrograms, commands, objectTable, drawCalls) : null;
-        const elevatorConfig = readElevator(objectPlacements, commands, objectTable, map);
         const elevator = elevatorConfig !== null ? buildElevatorVisuals(sharedOutput, elevatorConfig, segmentBuffers, dat, drawCalls) : null;
         if (elevator !== null) drawCalls.push(...elevator.drawCalls);
-        const arrivalEntrance = findArrivalEntrance(objectPlacements);
         const arrival = arrivalEntrance !== null ? buildArrivalVisuals(sharedOutput,
             new EntranceArrival(arrivalEntrance.placement, arrivalEntrance.index,
                 parseParticleDefinition(await dataFetcher.fetchData(`${pathBase}/${particleDefinitionFile(35)}`)), map), segment1) : null;
         if (arrival !== null) drawCalls.push(arrival.draw);
-        const particleSimulation = torchSimulation !== null || scriptSimulation !== null || levelEvents !== null || rain !== null || arrival !== null || fireFoxParticles !== null ? new ParticleSimulation(torchSimulation, torchDefinition, scriptSimulation, levelEvents?.simulation, rain, arrival?.simulation, fireFoxParticles) : null;
+        const particleSources = [
+            torchSimulation !== null && torchDefinition !== null ? createTorchParticleSource(torchSimulation, torchDefinition) : null,
+            scriptSimulation !== null ? createParticleSpriteSource(scriptSimulation,
+                Array.from({ length: SCRIPT_PARTICLE_TEXTURE_OFFSETS.length }, (_, i) => SCRIPT_PARTICLE_TEXTURE_BASE + i), scriptSimulation.advanceTo.bind(scriptSimulation)) : null,
+            levelEvents !== null ? createParticleSpriteSource(levelEvents.simulation, levelEvents.simulation.textureIds) : null,
+            rain !== null ? createParticleSpriteSource(rain, rain.textureIds) : null,
+            arrival !== null ? createParticleSpriteSource(arrival.simulation, arrival.simulation.textureIds) : null,
+            fireFoxParticles !== null ? createParticleSpriteSource(fireFoxParticles, fireFoxParticles.textureIds, fireFoxParticles.advanceTo.bind(fireFoxParticles)) : null,
+        ].filter((source): source is ParticleSource => source !== null);
+        const particleSimulation = particleSources.length !== 0 ? new ParticleSimulation(particleSources) : null;
         if (skyMode === 0)
             drawCalls.push(...buildStarfield(sharedOutput, dat));
-        applyStartupLighting(drawCalls, readStartupLighting(commands, objectPlacements, animalPlacements));
+        applyStartupLighting(drawCalls, startupLighting);
 
         const entrance = objectPlacements.find((placement) => placement.id === 55) ?? objectPlacements[0];
         const levelCenter = [2304, 500, 3584];
@@ -332,9 +308,12 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
         const clearColor = skyMode === 0 ? colorNewFromRGBA(0, 0, 0, 1) : colorNewFromRGBA(0.88, 0.88, 0.88, 1);
         const [fogNear, fogFar] = makeFogNearFar(dat);
         const fogColor = colorNewFromRGBA8((dat.fogColor[0] << 24) | (dat.fogColor[1] << 16) | (dat.fogColor[2] << 8) | 0xFF);
-        const renderer = new SSSVRenderer(device, sharedOutput, drawCalls, fences, this.name, geometry.faces.length, initialWorldMatrix, clearColor, animalMarkers, hangingRibbons, fogNear, fogFar, fogColor, new PathOverlay(pathAnalysis, map), particleSimulation, animalStaticBuilds, animalSpawnMarkers, levelEvents, rain, fenceSwitch, objectMarkers, arrival, elevator, objectCommands, snowPlatforms, liveAnimalSpawns, lagoonMachine);
+        const renderer = new SSSVRenderer(device, sharedOutput, drawCalls, fences, this.name, geometry.faces.length, initialWorldMatrix, clearColor, animalMarkers, hangingRibbons, fogNear, fogFar, fogColor, new PathOverlay(pathAnalysis, map), {
+            particleSimulation, emitterPrograms: scriptSimulation?.programs, animalStaticBuilds, animalSpawnMarkers, levelEvents, rain, fenceSwitch, objectMarkers, arrival,
+            elevator, objectCommands, snowPlatforms, liveAnimalSpawns, lagoonMachine,
+        });
         renderer.installButtonInput(context.inputManager.toplevel, context.viewerInput.camera);
-        renderer.music = new MusicPlayer(dataFetcher, readStartupMusic(commands, objectPlacements, animalPlacements));
+        renderer.music = new MusicPlayer(dataFetcher, startupMusic);
         void renderer.music.initialize();
         return renderer;
     }

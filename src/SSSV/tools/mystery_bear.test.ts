@@ -1,9 +1,9 @@
 import { deepEqual, equal } from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { sampleMysteryBearBalls, sampleMysteryBearJoints } from "../mystery_bear.js";
+import { sampleMysteryBearBalls, sampleMysteryBearJoints } from "../animals/mystery_bear.js";
 import { MYSTERY_BEAR_STATIC_RECIPE } from "../animals/bear.js";
-import { mirrorZ } from "../level.js";
+import { mirrorZ } from "../core/level.js";
 
 const placement = { id: 24, x: 2592, z: 4371, y: 528, rotation: 128, health: 127, unkC: 61, unkE: 0 };
 

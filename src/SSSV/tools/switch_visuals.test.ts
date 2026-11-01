@@ -3,12 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../level.js";
-import { LEVELS } from "../level_table.js";
-import { indexObjectTable, parseObjectTable } from "../objects.js";
-import { readObjectStartupAppearance, readSwitchStartupAppearance } from "../object_startup.js";
-import { parseCommands } from "../paths.js";
-import { buildLampGlows, readLampStartup, buildLeverLights, buildSwitchBall, buildSwitchBalls } from "../switch_visuals.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../core/level.js";
+import { LEVELS } from "../core/level_table.js";
+import { indexObjectTable, parseObjectTable } from "../objects/objects.js";
+import { readObjectStartupAppearance, readSwitchStartupAppearance } from "../objects/object_startup.js";
+import { parseCommands } from "../commands/paths.js";
+import { buildLampGlows, readLampStartup, buildLeverLights, buildSwitchBall, buildSwitchBalls } from "../objects/switch_visuals.js";
 
 const read = (p: string) => ArrayBufferSlice.fromView(readFileSync(p));
 const available = existsSync('data/SSSV/objects.bin');

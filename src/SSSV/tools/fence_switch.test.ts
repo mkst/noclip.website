@@ -3,14 +3,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { FenceSwitchRuntime, inSwitchRegion, readFenceSwitch } from "../fence_switch.js";
-import { resolveFenceSpans } from "../fences.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseLinks, parseObjects } from "../level.js";
-import { LEVELS } from "../level_table.js";
-import { indexObjectTable, parseObjectTable } from "../objects.js";
-import { parseCommands } from "../paths.js";
-import { buildSwitchBall } from "../switch_visuals.js";
-import { CommandVM } from "../command_vm.js";
+import { FenceSwitchRuntime, inSwitchRegion, readFenceSwitch } from "../objects/fence_switch.js";
+import { resolveFenceSpans } from "../objects/fences.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseLinks, parseObjects } from "../core/level.js";
+import { LEVELS } from "../core/level_table.js";
+import { indexObjectTable, parseObjectTable } from "../objects/objects.js";
+import { parseCommands } from "../commands/paths.js";
+import { buildSwitchBall } from "../objects/switch_visuals.js";
+import { CommandVM } from "../commands/command_vm.js";
 
 const read = (p: string) => ArrayBufferSlice.fromView(readFileSync(p));
 const available = existsSync('data/SSSV/levels/HAVE_A_NICE_DAY.bin');
@@ -115,6 +115,17 @@ test('a fence VM fault retains command provenance and recovers through an explic
     commands[52].opcode = 0x3D; r.setEnabled(true);
     equal(r.error, null); equal(r.ready, true); equal(r.vm.location.scriptBase, 82);
     r.activate(); r.step(); waitReady(r); equal(r.state, 1);
+});
+
+test('fence steps on its first scene frame, normalizes input and resumes immediately after a seek', { skip: !available }, () => {
+    const { r } = runtime(); r.setEnabled(true);
+    equal(r.vm.location.tick, 0);
+    r.advanceTo(10000.9); equal(r.vm.location.tick, 1);
+    r.advanceTo(10000.1); equal(r.vm.location.tick, 1);
+    r.advanceTo(-1); equal(r.vm.location.tick, 0);
+    r.advanceTo(1); equal(r.vm.location.tick, 1);
+    r.setEnabled(false); r.advanceTo(10000);
+    r.setEnabled(true); r.advanceTo(10000); equal(r.vm.location.tick, 1);
 });
 
 test('empty enumeration returns safely and reset/disable/seeks restore the declared fence policy', { skip: !available }, () => {

@@ -1,7 +1,7 @@
 import { deepStrictEqual, equal } from "node:assert/strict";
 import { test } from "node:test";
-import { DOG_DEACTIVATED_RECIPE, DOG_STATIC_RECIPE, classifyAnimalHealth, getDogStaticRecipe, getSpawnMovementMode, indexAnimalPlacements } from "../animal_contracts.js";
-import type { LevelAnimalPlacement } from "../level.js";
+import { DOG_DEACTIVATED_RECIPE, DOG_STATIC_RECIPE, classifyAnimalHealth, getDogStaticRecipe, getSpawnMovementMode, indexAnimalPlacements } from "../animals/animal_contracts.js";
+import type { LevelAnimalPlacement } from "../core/level.js";
 
 function placement(id: number, health: number): LevelAnimalPlacement {
     return { id, x: 10, z: 20, y: 30, rotation: 64, health, unkC: 0, unkE: 0 };

@@ -1,4 +1,4 @@
-import type { AnimalModelRecipe, AnimalPartAttachment } from "../animal_contracts.js";
+import type { AnimalModelRecipe, AnimalPartAttachment } from "./animal_contracts.js";
 
 function part(order: number, name: string, address: number, from: number, to: number, mirror: 0 | 1 = 0): AnimalPartAttachment {
     return { order, name, address, segment: 4, sourceVertexAxes: true, joints: { from, to }, scale: { kind: "unit-16.16", value: 0x29800 }, mirror, orientationMode: 0 };
@@ -44,6 +44,40 @@ export const BEAR_STATIC_RECIPE: AnimalModelRecipe = {
         { order: 13, kind: "apply-state-display-list", address: 0x010037F0, segment: 1 },
         { order: 15, kind: "load-eye-palette-frame", paletteAddress: 0x01002C40, textureAddress: 0x010025A0 },
         { order: 17, kind: "apply-state-display-list", address: 0x01003840, segment: 1 },
+    ],
+};
+
+export const CRAZY_BEAR_STATIC_RECIPE: AnimalModelRecipe = {
+    animalId: 23, species: "CRAZY_BEAR",
+    pose: {
+        sample: {
+            // State 2, flat support, no blend/limb gestures; arms and split jaw held at tick 0.
+            jointPositions: {
+                0: { x: 0, z: 0, y: 1296 },
+                1: { x: 0, z: 0, y: 2592 }, 2: { x: 0, z: 0, y: 0 },
+                7: { x: 1037, z: 0, y: 2592 }, 8: { x: 1037, z: 54, y: 4916 },
+                10: { x: -1037, z: 0, y: 2592 }, 11: { x: -1037, z: 0, y: 258 },
+                15: { x: -656, z: 1410, y: 0 }, 18: { x: 656, z: 1410, y: 0 },
+                19: { x: 0, z: 43, y: 2712 }, 20: { x: 0, z: 821, y: 2664 },
+                27: { x: 0, z: 821, y: 2760 },
+            },
+            scaleInputs: { outerMatrixAxis16_16: [0x4000, 0x4000, 0x4000] },
+            eyeFrame: 0,
+        },
+    },
+    parts: [
+        part(0, "body", 0x040082C0, 1, 2),
+        part(2, "head", 0x04008A20, 1, 20),
+        part(3, "jaw", 0x04008E30, 1, 27),
+        part(4, "front left leg", 0x04007EC0, 2, 15),
+        part(6, "front right leg", 0x04007EC0, 2, 18, 1),
+        part(7, "rear left leg", 0x040077C0, 7, 8),
+        part(9, "rear right leg", 0x040077C0, 10, 11, 1),
+    ],
+    stateChanges: [
+        { order: 1, kind: "load-tile", paletteAddress: 0x010226B0, textureAddress: 0x010224B0 },
+        { order: 5, kind: "set-cull-mode", mode: "front" },
+        { order: 8, kind: "set-cull-mode", mode: "front" },
     ],
 };
 

@@ -1,6 +1,6 @@
 import { equal } from "node:assert/strict";
 import { test } from "node:test";
-import { getLevelRegularTextureBank } from "../level_table.js";
+import { getLevelRegularTextureBank } from "../core/level_table.js";
 
 test("jungle and desert billboard banks follow the runtime's swapped lookup pointers", () => {
     equal(getLevelRegularTextureBank(3, 3)?.romStart, 0x50A4D0);

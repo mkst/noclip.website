@@ -2,17 +2,17 @@ import { deepEqual, equal, ok } from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { RainButtonRuntime, readRainButton } from "../buttons.js";
-import { RainSimulation } from "../rain.js";
-import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../level.js";
-import { parseCommands } from "../paths.js";
-import { LEVELS } from "../level_table.js";
+import { RainButtonRuntime, readRainButton } from "../objects/buttons.js";
+import { RainSimulation } from "../effects/rain.js";
+import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../core/level.js";
+import { parseCommands } from "../commands/paths.js";
+import { LEVELS } from "../core/level_table.js";
 import type { Camera } from "../../Camera.js";
 import { RSPSharedOutput, Vertex } from "../../BanjoKazooie/f3dex.js";
-import { SSSVDrawCall, SSSVLayer } from "../terrain.js";
-import { pickButton, rayTriangle } from "../button_input.js";
+import { SSSVDrawCall, SSSVLayer } from "../render/terrain.js";
+import { pickButton, rayTriangle } from "../ui/button_input.js";
 import { mat4 } from "gl-matrix";
-import { CommandVM } from "../command_vm.js";
+import { CommandVM } from "../commands/command_vm.js";
 
 const available = existsSync("data/SSSV/levels/JUNGLE_DOLDRUMS.bin");
 
@@ -87,6 +87,17 @@ test('rain contacts use collision ground, upper surfaces and water independently
     for (let n = 0; n < 12; n++) water.spawnDrop(1000 + n, 1000, 899);
     water.step(camera); equal(water.impactCount, 12);
     ok(water.particles.some(p => p.id === 19)); ok(water.particles.every(p => p.y === 900 * 65536));
+});
+
+test('rain steps on its first scene frame, normalizes input and resumes immediately after a seek', { skip: !available }, () => {
+    const r = simulation(); r.setEnabled(true);
+    equal(r.button.vm.location.tick, 0);
+    r.advanceTo(10000.9, camera); equal(r.button.vm.location.tick, 1);
+    r.advanceTo(10000.1, camera); equal(r.button.vm.location.tick, 1);
+    r.advanceTo(-1, camera); equal(r.button.vm.location.tick, 0);
+    r.advanceTo(1, camera); equal(r.button.vm.location.tick, 1);
+    r.setEnabled(false); r.advanceTo(10000, camera);
+    r.setEnabled(true); r.advanceTo(10000, camera); equal(r.button.vm.location.tick, 1);
 });
 
 test('disable, reset and discontinuous seeks clear the rain cycle and particles', { skip: !available }, () => {

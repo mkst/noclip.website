@@ -1,6 +1,6 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
 import { SPRINGY_STATIC_RECIPE, SPRINGY_DEACTIVATED_RECIPE } from "../animals/sheep.js";
 
 test("SPRINGY_THINGY uses the neutral spring support, without SHEEP's four-leg skeleton", () => {

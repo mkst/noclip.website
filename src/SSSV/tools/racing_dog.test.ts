@@ -1,6 +1,6 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
-import { getStaticAnimalRecipe, RACING_DOG_STATIC_RECIPE, RACING_DOG_DEACTIVATED_RECIPE } from "../animal_contracts.js";
+import { getStaticAnimalRecipe, RACING_DOG_STATIC_RECIPE, RACING_DOG_DEACTIVATED_RECIPE } from "../animals/animal_contracts.js";
 
 test("RACING_DOG uses zero-boost supports, neutral head and fully charged mirrored pods", () => {
     const r = RACING_DOG_STATIC_RECIPE, j = r.pose.sample.jointPositions;

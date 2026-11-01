@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert, assertExists } from "../../util.js";
-import { ANIMAL_NAMES } from "../animals.js";
-import { classifyAnimalHealth, indexAnimalPlacements } from "../animal_contracts.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat } from "../level.js";
-import { BIOME_SEGMENTS, LEVELS } from "../level_table.js";
+import { ANIMAL_NAMES } from "../animals/animals.js";
+import { classifyAnimalHealth, indexAnimalPlacements } from "../animals/animal_contracts.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat } from "../core/level.js";
+import { BIOME_SEGMENTS, LEVELS } from "../core/level_table.js";
 
 interface PlacementRecord {
     level: string;

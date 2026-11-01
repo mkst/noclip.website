@@ -2,13 +2,13 @@ import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { parseLevelDat } from "../level.js";
-import type { LevelObjectPlacement } from "../level.js";
-import { readObjectMotion, computeObjectMotionMatrix, computeObjectMotionPosition } from "../object_motion.js";
-import type { ObjectMotionTransform } from "../object_motion.js";
+import { parseLevelDat } from "../core/level.js";
+import type { LevelObjectPlacement } from "../core/level.js";
+import { readObjectMotion, computeObjectMotionMatrix, computeObjectMotionPosition } from "../objects/object_motion.js";
+import type { ObjectMotionTransform } from "../objects/object_motion.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { buildObjects, parseObjectTable } from "../objects.js";
-import { parseCommands } from "../paths.js";
+import { buildObjects, parseObjectTable } from "../objects/objects.js";
+import { parseCommands } from "../commands/paths.js";
 
 (globalThis as any).window = { debug: false };
 

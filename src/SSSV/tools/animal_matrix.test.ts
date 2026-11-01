@@ -8,9 +8,9 @@ import {
     multiplyAnimalMatrices,
     transformAnimalNormal,
     writeAnimalLimbMatrix,
-} from "../animal_matrix.js";
-import type { AnimalJoint, AnimalLimbMatrixParameters } from "../animal_matrix.js";
-import { mirrorZ } from "../level.js";
+} from "../animals/animal_matrix.js";
+import type { AnimalJoint, AnimalLimbMatrixParameters } from "../animals/animal_matrix.js";
+import { mirrorZ } from "../core/level.js";
 
 const unitLimb: AnimalLimbMatrixParameters = {
     scaleX: 0x10000,

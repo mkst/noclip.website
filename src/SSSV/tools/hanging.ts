@@ -4,11 +4,11 @@ import { PNG } from "pngjs";
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert } from "../../util.js";
-import { findPayload, LevelPayloadType, parseHangingObjects, parseLevelContainer, parseObjects } from "../level.js";
-import { HANGING_MATERIALS, HANGING_TEXTURE_STYLES, HANGING_TYPE_DESCRIPTORS, parseHangingTextures, resolveHangingObject } from "../hanging.js";
-import type { HangingMaterial, HangingPalette, HangingTextureStyle } from "../hanging.js";
-import type { LevelHangingPlacement } from "../level.js";
-import { LEVELS } from "../level_table.js";
+import { findPayload, LevelPayloadType, parseHangingObjects, parseLevelContainer, parseObjects } from "../core/level.js";
+import { HANGING_MATERIALS, HANGING_TEXTURE_STYLES, HANGING_TYPE_DESCRIPTORS, parseHangingTextures, resolveHangingObject } from "../objects/hanging.js";
+import type { HangingMaterial, HangingPalette, HangingTextureStyle } from "../objects/hanging.js";
+import type { LevelHangingPlacement } from "../core/level.js";
+import { LEVELS } from "../core/level_table.js";
 
 function read(path: string): ArrayBufferSlice {
     return ArrayBufferSlice.fromView(readFileSync(path));

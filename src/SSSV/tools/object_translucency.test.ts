@@ -4,18 +4,19 @@ import { test } from 'node:test';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 import { RSP_Geometry, RSPSharedOutput } from '../../BanjoKazooie/f3dex.js';
 import { ACMUX, decodeCombineParams } from '../../Common/N64/RDP.js';
-import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from '../level.js';
-import { buildObjects, indexObjectTable, parseObjectTable, REFLECTION_TEXTURE_ID_BASE } from '../objects.js';
-import { parseCommands } from '../paths.js';
-import { COMBINE_TEXTURED, RENDER_ALPHA, RENDER_OPAQUE, RENDER_TRANSLUCENT } from '../terrain.js';
-import { parseI8Texture, parseMipmapBank } from '../texture.js';
+import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from '../core/level.js';
+import { buildObjects, indexObjectTable, parseObjectTable, REFLECTION_TEXTURE_ID_BASE, SHADOW_TEXTURE_ID_BASE } from '../objects/objects.js';
+import { parseCommands } from '../commands/paths.js';
+import { COMBINE_TEXTURED, RENDER_ALPHA, RENDER_OPAQUE, RENDER_TRANSLUCENT } from '../render/terrain.js';
+import { parseI8Texture, parseMipmapBank } from '../core/texture.js';
 
 (globalThis as any).window = { debug: false };
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));
 
-function synthetic(materials: number[], prefix: [number, number][] = []) {
+function synthetic(materials: number[], prefix: [number, number][] = [], shadowType = 0) {
     const table = new ArrayBuffer(0x9C), entry = new DataView(table);
     entry.setUint16(0, 12); entry.setUint8(3, 6); entry.setUint32(4, 0x01000010);
+    entry.setUint8(0x96, shadowType); entry.setUint8(0x97, 20); entry.setUint8(0x98, 20);
     const segment = new ArrayBuffer(0x140), view = new DataView(segment);
     const commands: [number, number][] = [...prefix, [0x04000000 | (3 << 10), 0x01000100], [0xBF000000, 0x00000204], [0xB8000000, 0]];
     commands.forEach(([a, b], i) => { view.setUint32(0x10 + i * 8, a); view.setUint32(0x14 + i * 8, b); });
@@ -24,6 +25,7 @@ function synthetic(materials: number[], prefix: [number, number][] = []) {
     const texture = parseI8Texture(ArrayBufferSlice.fromView(new Uint8Array(1024)), 32, 32, 'zero-alpha');
     shared.textureCache.textures[0] = texture;
     shared.textureCache.textures[REFLECTION_TEXTURE_ID_BASE] = texture;
+    shared.textureCache.textures[SHADOW_TEXTURE_ID_BASE] = texture;
     const placements = materials.map(unkC => ({ id: 12, x: 0, y: 0, z: 0, angle: 0, zRotation: 0, unkC, scale: 2048, commandReferenceIdx: 0, commandsLength: 0, unk12: 0, unk15: 0 }));
     return buildObjects(shared, placements, indexObjectTable(parseObjectTable(new ArrayBufferSlice(table))), [undefined, new ArrayBufferSlice(segment)], parseLevelDat(new ArrayBufferSlice(new ArrayBuffer(0xA0))));
 }
@@ -48,6 +50,19 @@ test('object material flags keep opaque, cutout, translucent and reflection stat
     }
     equal(draws[3].textureGen, true);
     deepEqual(draws[3].textureIndices, [REFLECTION_TEXTURE_ID_BASE]);
+});
+
+test('source material flags suppress both shadow types only for the translucent branch', () => {
+    for (const shadowType of [1, 2]) {
+        for (const material of [0, 0x40, 0x80, 0xC0]) {
+            const draws = synthetic([material, material], [], shadowType);
+            equal(draws.filter(d => d.shadowFadeExponent !== null).length, material === 0x80 ? 0 : 2);
+            equal(draws.filter(d => d.shadowFadeExponent === null).length, 2);
+        }
+    }
+    const draws = synthetic([0x80], [[0xB900031D, RENDER_OPAQUE]], 1);
+    equal(draws.length, 1);
+    equal(draws[0].translucent, false);
 });
 
 test('model display lists can override inherited translucent render state, combiner, opacity and culling', () => {

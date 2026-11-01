@@ -1,11 +1,11 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
 import { RAT_STATIC_RECIPE, KING_RAT_STATIC_RECIPE } from "../animals/rat.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { buildRatEyeGlows } from "../rat_eye_glows.js";
-import { LEVEL_Z_MIRROR } from "../level.js";
-import { sampleAnimalEyeIndices } from "../animal_eyes.js";
+import { buildRatEyeGlows } from "../animals/rat_eye_glows.js";
+import { LEVEL_Z_MIRROR } from "../core/level.js";
+import { sampleAnimalEyeIndices } from "../animals/animal_eyes.js";
 
 test("RAT preserves source fixed supports, primitive eyes and unmirrored wheels", () => {
     const r = RAT_STATIC_RECIPE, j = r.pose.sample.jointPositions;

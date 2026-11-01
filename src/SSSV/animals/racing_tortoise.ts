@@ -1,4 +1,4 @@
-import type { AnimalModelRecipe, AnimalPartAttachment } from "../animal_contracts.js";
+import type { AnimalModelRecipe, AnimalPartAttachment } from "./animal_contracts.js";
 import { TORTOISE_TANK_STATIC_RECIPE } from "./tortoise_tank.js";
 
 function part(order: number, name: string, address: number, from: number, to: number, value: 0xE800 | 0x12200 = 0xE800): AnimalPartAttachment {

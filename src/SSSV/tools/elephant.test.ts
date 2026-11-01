@@ -4,9 +4,9 @@ import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import { ELEPHANT_STATIC_RECIPE } from "../animals/elephant.js";
-import { buildStaticAnimalModels } from "../animal_renderer.js";
-import { advanceAnimalTail, createAnimalTail, animalTailMatrix } from "../animal_tails.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap } from "../level.js";
+import { buildStaticAnimalModels } from "../animals/animal_renderer.js";
+import { advanceAnimalTail, createAnimalTail, animalTailMatrix } from "../animals/animal_tails.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap } from "../core/level.js";
 
 (globalThis as any).window = { debug: false };
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));

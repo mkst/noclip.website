@@ -1,10 +1,10 @@
 import { deepStrictEqual, equal, notStrictEqual, ok } from "node:assert/strict";
 import { test } from "node:test";
-import { getAnimalLocomotion } from "../animal_locomotion.js";
-import { MAP_X_POINTS, MAP_Z_POINTS } from "../level.js";
-import type { LevelMapEntry, LevelPath } from "../level.js";
-import { createGroundSnappedPathDisplayVariants, createPathDisplayVariants, PATH_GROUND_CLEARANCE } from "../paths.js";
-import type { PathAnalysis, PathRole } from "../paths.js";
+import { getAnimalLocomotion } from "../animals/animal_locomotion.js";
+import { MAP_X_POINTS, MAP_Z_POINTS } from "../core/level.js";
+import type { LevelMapEntry, LevelPath } from "../core/level.js";
+import { createGroundSnappedPathDisplayVariants, createPathDisplayVariants, PATH_GROUND_CLEARANCE } from "../commands/paths.js";
+import type { PathAnalysis, PathRole } from "../commands/paths.js";
 
 function terrain(diagonal = 0): LevelMapEntry[] {
     const map = Array.from({ length: MAP_X_POINTS * MAP_Z_POINTS }, () => ({

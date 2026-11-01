@@ -1,4 +1,4 @@
-import type { AnimalModelRecipe } from "../animal_contracts.js";
+import type { AnimalModelRecipe } from "./animal_contracts.js";
 import { FOX_STATIC_RECIPE } from "./fox.js";
 
 export const FIRE_FOX_STATIC_RECIPE: AnimalModelRecipe = {

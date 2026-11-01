@@ -1,7 +1,7 @@
 import { deepEqual, equal, throws } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "../particle_assets.js";
+import { parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "../effects/particle_assets.js";
 
 const raw = Uint8Array.from(Buffer.from("00d61400000b0100000000020604ff80f800000000000000", "hex"));
 

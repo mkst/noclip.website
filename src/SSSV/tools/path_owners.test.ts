@@ -2,9 +2,9 @@ import { deepStrictEqual, equal, ok } from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLinks, parseObjects, parsePaths } from "../level.js";
-import { analyzePathUses, describePathEntity, parseCommands, pathEntityKey } from "../paths.js";
-import type { LevelCommand, PathAnalysis } from "../paths.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLinks, parseObjects, parsePaths } from "../core/level.js";
+import { analyzePathUses, describePathEntity, parseCommands, pathEntityKey } from "../commands/paths.js";
+import type { LevelCommand, PathAnalysis } from "../commands/paths.js";
 
 function bank(...records: number[][]): LevelCommand[] {
     const bytes = Uint8Array.from([0, 0, ...records.flatMap(([opcode, ...payload]) => [opcode >> 8, opcode & 255, ...Array.from({ length: 8 }, (_, i) => payload[i] ?? 0)])]);

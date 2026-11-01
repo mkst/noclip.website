@@ -1,6 +1,6 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
 import { FOX_STATIC_RECIPE, RACING_FOX_STATIC_RECIPE, RACING_FOX_DEACTIVATED_RECIPE } from "../animals/fox.js";
 
 test("standard FOX selects a standing model without claiming desert variants or its deactivated pose", () => {

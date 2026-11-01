@@ -1,4 +1,4 @@
-import type { AnimalModelRecipe, AnimalPartAttachment } from "../animal_contracts.js";
+import type { AnimalModelRecipe, AnimalPartAttachment } from "./animal_contracts.js";
 import { RACING_MOUSE_STATIC_RECIPE } from "./mouse.js";
 
 function ratRecipe(animalId: 32 | 13, species: "RAT" | "KING_RAT", size: 1 | 2): AnimalModelRecipe {

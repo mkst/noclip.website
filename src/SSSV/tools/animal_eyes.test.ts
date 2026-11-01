@@ -1,6 +1,6 @@
 import { deepEqual, equal } from "node:assert/strict";
 import { test } from "node:test";
-import { sampleAnimalEyeIndices, sampleAnimalEyeFrame, sampleAnimalEyeRed } from "../animal_eyes.js";
+import { sampleAnimalEyeIndices, sampleAnimalEyeFrame, sampleAnimalEyeRed } from "../animals/animal_eyes.js";
 
 test("idle eye timer matches the source C over its complete 4096-tick pattern", () => {
     // FNV-1a of logical left/right bytes from unmodified func_8031A150 in a host C harness.

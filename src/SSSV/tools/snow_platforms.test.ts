@@ -2,12 +2,12 @@ import { equal, ok, deepEqual } from 'node:assert/strict';
 import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
-import { findPayload, LevelPayloadType as P, parseLevelContainer, parseObjects, parsePaths, parseLinks } from '../level.js';
-import { indexObjectTable, parseObjectTable } from '../objects.js';
-import { parseCommands } from '../paths.js';
-import { LEVELS } from '../level_table.js';
-import { readSnowPlatforms, SnowPlatformRuntime } from '../snow_platforms.js';
-import { sampleCommandPath } from '../command_path.js';
+import { findPayload, LevelPayloadType as P, parseLevelContainer, parseObjects, parsePaths, parseLinks } from '../core/level.js';
+import { indexObjectTable, parseObjectTable } from '../objects/objects.js';
+import { parseCommands } from '../commands/paths.js';
+import { LEVELS } from '../core/level_table.js';
+import { readSnowPlatforms, SnowPlatformRuntime } from '../objects/snow_platforms.js';
+import { sampleCommandPath } from '../commands/command_path.js';
 const available = existsSync('data/SSSV/levels/SNOW_JOKE.bin');
 const read = (p: string) => ArrayBufferSlice.fromView(readFileSync(p));
 function fixture(level = 'SNOW_JOKE') {
@@ -35,6 +35,24 @@ test('source path sampler retains the leading interval and finite clamped/loopin
     deepEqual(sampleCommandPath(paths[9], 0, false).map(v => v >> 16), [3296, 640, 4192]);
     deepEqual(sampleCommandPath(paths[9], (paths[9].waypoints.length + 1) * 128, false).map(v => v >> 16), [3936, 1216, 3104]);
     for (const id of [0, 1, 9]) for (let t = 0; t < 1400; t++) ok(sampleCommandPath(paths[id], t, id !== 9).every(Number.isFinite));
+});
+
+test('the shared capability does not widen Snow target, path or operand admission', { skip: !available }, () => {
+    const r = runtime(), p = new DataView(new ArrayBuffer(8));
+    const configure = (path: number, speed: number, direction: number, mode: number) => {
+        p.setUint8(1, path); p.setUint8(3, speed); p.setInt8(5, direction); p.setUint8(6, mode);
+    };
+    configure(0, 1, 1, 0);
+    const helper = [...r.world.objects.values()].find(o => o.typeId === 64)!;
+    equal(r.world.executePathCommand(helper.id, 0x34, p).ok, false);
+    equal(r.world.executePathCommand(null, 0x34, p).ok, false);
+    for (const values of [[7, 1, 1, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 1, 1, 2]]) {
+        configure(values[0], values[1], values[2], values[3]);
+        equal(r.world.executePathCommand('object:8', 0x34, p).ok, false);
+    }
+    equal(r.world.paths.size, 0); equal(r.world.approaches.size, 0);
+    configure(0, 1, 1, 0); ok(r.world.executePathCommand('object:8', 0x34, p).ok);
+    equal(r.world.paths.get('object:8')!.path.index, 0);
 });
 
 test('the real initial helpers spawn once, wire references and execute their configuration/state programs', { skip: !available }, () => {
@@ -88,6 +106,15 @@ test('pause, repeated frames, reset/disable and seeks keep a single bounded isla
     r.setEnabled(false); equal(r.world.objects.size, 3); r.setEnabled(true); equal(r.world.objects.size, 6);
 });
 
+
+test('first frame anchors after startup and discontinuities still reset while motion is paused', { skip: !available }, () => {
+    const r = runtime(), initial = r.world;
+    const tick = () => r.world.programs.get('object:8')!.location.tick;
+    equal(tick(), 0); r.advanceTo(10000); equal(tick(), 0);
+    r.motionEnabled = false; r.advanceTo(10900); equal(r.world, initial); equal(tick(), 0);
+    r.advanceTo(11801); ok(r.world !== initial); equal(tick(), 0);
+    r.motionEnabled = true; r.advanceTo(11802); equal(tick(), 1);
+});
 
 test('visibility switch uses its authored link and delayed material writes independently of the fans', { skip: !available }, () => {
     const r = runtime(); equal(r.world.getEntity('object:4')!.references.get(1), 'object:3');

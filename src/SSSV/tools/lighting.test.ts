@@ -2,11 +2,11 @@ import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSP_Geometry } from "../../BanjoKazooie/f3dex.js";
-import type { LevelAnimalPlacement, LevelObjectPlacement } from "../level.js";
-import { applyStartupLighting, readStartupLighting } from "../lighting.js";
-import { parseCommands } from "../paths.js";
-import { makeLight, SSSVDrawCall } from "../terrain.js";
-import { parseLevelDat } from "../level.js";
+import type { LevelAnimalPlacement, LevelObjectPlacement } from "../core/level.js";
+import { applyStartupLighting, readStartupLighting } from "../render/lighting.js";
+import { parseCommands } from "../commands/paths.js";
+import { makeLight, SSSVDrawCall } from "../render/terrain.js";
+import { parseLevelDat } from "../core/level.js";
 
 const object: LevelObjectPlacement = {
     id: 55, x: 0, z: 0, y: 0, zRotation: 0, angle: 0, unkC: 0, scale: 2048,

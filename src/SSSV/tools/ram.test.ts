@@ -1,7 +1,7 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import { RAM_STATIC_RECIPE, SPRINGY_RAM_STATIC_RECIPE, SHEEP_STATIC_RECIPE, SPRINGY_STATIC_RECIPE } from "../animals/sheep.js";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
 
 test("RAM variants reuse source support and wool, replace the head and omit separate eyes", () => {
     for (const [ram, base] of [[RAM_STATIC_RECIPE, SHEEP_STATIC_RECIPE], [SPRINGY_RAM_STATIC_RECIPE, SPRINGY_STATIC_RECIPE]]) {

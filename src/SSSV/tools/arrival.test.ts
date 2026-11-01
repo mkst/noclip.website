@@ -2,11 +2,11 @@ import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { ARRIVAL_SPARK_TEXTURE, ARRIVAL_TEXTURE_BASE, buildArrivalVisuals, EntranceArrival, findArrivalEntrance } from "../arrival.js";
-import { MAP_X_POINTS, MAP_Z_POINTS, mirrorZ } from "../level.js";
-import type { LevelMapEntry, LevelObjectPlacement } from "../level.js";
-import { parseParticleDefinition } from "../particle_assets.js";
-import { teleporterIsActive } from "../teleporters.js";
+import { ARRIVAL_SPARK_TEXTURE, ARRIVAL_TEXTURE_BASE, buildArrivalVisuals, EntranceArrival, findArrivalEntrance } from "../effects/arrival.js";
+import { MAP_X_POINTS, MAP_Z_POINTS, mirrorZ } from "../core/level.js";
+import type { LevelMapEntry, LevelObjectPlacement } from "../core/level.js";
+import { parseParticleDefinition } from "../effects/particle_assets.js";
+import { teleporterIsActive } from "../objects/teleporters.js";
 
 (globalThis as any).window = { debug: false };
 const definition = parseParticleDefinition(ArrayBufferSlice.fromView(Buffer.from("205c080000c80000000000010001e73ee73e000000000000", "hex")));

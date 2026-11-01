@@ -3,12 +3,12 @@ import { test } from "node:test";
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { mirrorZ, parseLevelDat } from "../level.js";
-import type { LevelObjectPlacement } from "../level.js";
-import { buildObjects, parseObjectTable } from "../objects.js";
-import { computeObjectRotationMatrix, readObjectRotation } from "../object_rotation.js";
-import type { ObjectRotationTransform } from "../object_rotation.js";
-import { parseCommands } from "../paths.js";
+import { mirrorZ, parseLevelDat } from "../core/level.js";
+import type { LevelObjectPlacement } from "../core/level.js";
+import { buildObjects, parseObjectTable } from "../objects/objects.js";
+import { computeObjectRotationMatrix, readObjectRotation } from "../objects/object_rotation.js";
+import type { ObjectRotationTransform } from "../objects/object_rotation.js";
+import { parseCommands } from "../commands/paths.js";
 
 (globalThis as any).window = { debug: false };
 

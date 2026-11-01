@@ -3,16 +3,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseObjects } from "../level.js";
-import type { LevelObjectPlacement } from "../level.js";
-import { LEVELS } from "../level_table.js";
-import { buildBillboards, indexObjectTable, parseObjectTable } from "../objects.js";
-import { parseLevelDat } from "../level.js";
-import { parseI8Texture } from "../texture.js";
-import { createObjectMarkers, buildObjectMarkers } from "../object_markers.js";
-import { readObjectVisibility } from "../object_startup.js";
-import { parseCommands } from "../paths.js";
-import { SSSVLayer } from "../terrain.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseObjects } from "../core/level.js";
+import type { LevelObjectPlacement } from "../core/level.js";
+import { LEVELS } from "../core/level_table.js";
+import { buildBillboards, indexObjectTable, parseObjectTable } from "../objects/objects.js";
+import { parseLevelDat } from "../core/level.js";
+import { parseI8Texture } from "../core/texture.js";
+import { createObjectMarkers, buildObjectMarkers } from "../objects/object_markers.js";
+import { readObjectVisibility } from "../objects/object_startup.js";
+import { parseCommands } from "../commands/paths.js";
+import { SSSVLayer } from "../render/terrain.js";
 
 const placement: LevelObjectPlacement = { id: 141, x: 100, y: 200, z: 300, angle: 0, zRotation: 0, unkC: 40, scale: 2048, commandReferenceIdx: 0, commandsLength: 0, unk12: 0, unk15: 0 };
 function commands(...records: number[][]) {

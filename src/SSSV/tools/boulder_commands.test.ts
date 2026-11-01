@@ -2,10 +2,10 @@ import { deepEqual, equal, ok } from 'node:assert/strict';
 import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
-import { findPayload, LevelPayloadType as P, parseLevelContainer, parseObjects, parseMap } from '../level.js';
-import { parseCommands } from '../paths.js';
-import { readBoulderEvent, BoulderEventSimulation } from '../level_events.js';
-import { LEVEL_EVENT_PARTICLE_IDS, parseParticleDefinition } from '../particle_assets.js';
+import { findPayload, LevelPayloadType as P, parseLevelContainer, parseObjects, parseMap } from '../core/level.js';
+import { parseCommands } from '../commands/paths.js';
+import { readBoulderEvent, BoulderEventSimulation } from '../effects/level_events.js';
+import { LEVEL_EVENT_PARTICLE_IDS, parseParticleDefinition } from '../effects/particle_assets.js';
 const read = (p: string) => ArrayBufferSlice.fromView(readFileSync(p));
 const available = existsSync('data/SSSV/levels/JUNGLE_DOLDRUMS.bin');
 function fixture(level = 'ROCKY_HARD_PLACE') {

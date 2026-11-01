@@ -1,4 +1,4 @@
-import type { AnimalModelRecipe, AnimalPartAttachment } from "../animal_contracts.js";
+import type { AnimalModelRecipe, AnimalPartAttachment } from "./animal_contracts.js";
 
 function part(order: number, name: string, address: number, from: number, to: number, mirror: 0 | 1 = 0, orientationMode: 0 | 1 = 0): AnimalPartAttachment {
     return { order, name, address, segment: 4, sourceVertexAxes: true, joints: { from, to }, scale: { kind: "unit-16.16", value: 0x26800 }, mirror, orientationMode };

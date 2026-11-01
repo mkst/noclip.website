@@ -1,8 +1,8 @@
 import { deepEqual, equal } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { parseLevelDat } from "../level.js";
-import { createAnimalMarkers, createPlayerPlacement } from "../animals.js";
+import { parseLevelDat } from "../core/level.js";
+import { createAnimalMarkers, createPlayerPlacement } from "../animals/animals.js";
 
 test("player species and heading come from dat rather than can/object rotation", () => {
     const bytes = new Uint8Array(0x9C), view = new DataView(bytes.buffer);

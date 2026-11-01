@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseMusicCatalog } from "../music.js";
+import { parseMusicCatalog } from "../audio/music.js";
 
 export function verifyMusicAssets(directory: string): string[] {
     const catalogPath = join(directory, "catalog.json");

@@ -3,12 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../level.js";
-import type { LevelObjectPlacement } from "../level.js";
-import { LEVELS } from "../level_table.js";
-import { buildBillboards, indexObjectTable, parseObjectTable } from "../objects.js";
-import { parseCommands } from "../paths.js";
-import { parseI8Texture } from "../texture.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../core/level.js";
+import type { LevelObjectPlacement } from "../core/level.js";
+import { LEVELS } from "../core/level_table.js";
+import { buildBillboards, indexObjectTable, parseObjectTable } from "../objects/objects.js";
+import { parseCommands } from "../commands/paths.js";
+import { parseI8Texture } from "../core/texture.js";
 
 const dat = parseLevelDat(new ArrayBufferSlice(new ArrayBuffer(0xA0)));
 const placement: LevelObjectPlacement = { id: 124, x: 100, y: 200, z: 300, angle: 0, zRotation: 0, unkC: 8, scale: 2048, commandReferenceIdx: 0, commandsLength: 0, unk12: 0, unk15: 0 };

@@ -2,11 +2,11 @@ import { equal, ok, deepEqual } from 'node:assert/strict';
 import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
-import { createPlayerPlacement } from '../animals.js';
-import { findPayload, LevelPayloadType as P, parseLevelContainer, parseObjects, parseLevelDat, parseMap } from '../level.js';
-import { parseCommands } from '../paths.js';
-import { LEVELS } from '../level_table.js';
-import { readLiveAnimalSpawns, LiveAnimalSpawnRuntime } from '../live_animal_spawns.js';
+import { createPlayerPlacement } from '../animals/animals.js';
+import { findPayload, LevelPayloadType as P, parseLevelContainer, parseObjects, parseLevelDat, parseMap } from '../core/level.js';
+import { parseCommands } from '../commands/paths.js';
+import { LEVELS } from '../core/level_table.js';
+import { readLiveAnimalSpawns, LiveAnimalSpawnRuntime } from '../animals/live_animal_spawns.js';
 const available = existsSync('data/SSSV/levels/GIVE_A_DOG_A_BONUS.bin');
 const read = (p: string) => ArrayBufferSlice.fromView(readFileSync(p));
 function fixture(level = 'GIVE_A_DOG_A_BONUS') {

@@ -6,12 +6,12 @@ import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import * as RDP from "../../Common/N64/RDP.js";
 import { FLYING_DOG_STATIC_RECIPE } from "../animals/flying_dog.js";
 import { FIRE_FOX_STATIC_RECIPE } from "../animals/fire_fox.js";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
-import { ANIMAL_EYE_ATLASES, sampleAnimalEyeFrame } from "../animal_eyes.js";
-import { buildStaticAnimalModels, updateAnimalFlame } from "../animal_renderer.js";
-import { FireFoxParticleSimulation, sampleFireFoxFlameScale, spawnFireFoxParticles } from "../fire_fox_effects.js";
-import { particleDefinitionFile, parseParticleDefinition, SCRIPT_PARTICLE_IDS } from "../particle_assets.js";
-import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseLevelDat } from "../level.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
+import { ANIMAL_EYE_ATLASES, sampleAnimalEyeFrame } from "../animals/animal_eyes.js";
+import { buildStaticAnimalModels, updateAnimalFlame } from "../animals/animal_renderer.js";
+import { FireFoxParticleSimulation, sampleFireFoxFlameScale, spawnFireFoxParticles } from "../animals/fire_fox_effects.js";
+import { particleDefinitionFile, parseParticleDefinition, SCRIPT_PARTICLE_IDS } from "../effects/particle_assets.js";
+import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseLevelDat } from "../core/level.js";
 
 (globalThis as any).window = { debug: false };
 

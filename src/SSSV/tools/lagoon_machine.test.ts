@@ -2,12 +2,12 @@ import { deepEqual, equal, ok } from 'node:assert/strict';
 import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import ArrayBufferSlice from '../../ArrayBufferSlice.js';
-import { findPayload, LevelPayloadType as P, parseLevelContainer, parseObjects, parseLinks, parseLevelDat } from '../level.js';
-import { createPlayerPlacement } from '../animals.js';
-import { parseCommands } from '../paths.js';
-import { indexObjectTable, parseObjectTable } from '../objects.js';
-import { LEVELS } from '../level_table.js';
-import { LagoonMachineRuntime, readLagoonMachine, MACHINE_ARMS, MACHINE_PADS, MACHINE_LEVERS } from '../lagoon_machine.js';
+import { findPayload, LevelPayloadType as P, parseLevelContainer, parseObjects, parseLinks, parseLevelDat } from '../core/level.js';
+import { createPlayerPlacement } from '../animals/animals.js';
+import { parseCommands } from '../commands/paths.js';
+import { indexObjectTable, parseObjectTable } from '../objects/objects.js';
+import { LEVELS } from '../core/level_table.js';
+import { LagoonMachineRuntime, readLagoonMachine, MACHINE_ARMS, MACHINE_PADS, MACHINE_LEVERS } from '../objects/lagoon_machine.js';
 const available = existsSync('data/SSSV/levels/HONEYMOON_LAGOON.bin');
 const read = (p: string) => ArrayBufferSlice.fromView(readFileSync(p));
 function fixture(level = 'HONEYMOON_LAGOON') {
@@ -107,6 +107,16 @@ test('native clock repeats, reset/disable and backwards or large seeks retain a 
     r.advanceTo(0); equal(r.world.globals[0], 0); r.advanceTo(2000); equal(r.world.globals[0], 0);
     for (let i = 0; i < 10; i++) { r.reset(); equal(r.world.objects.size, 4); equal(r.world.programs.size, 14); }
     r.setEnabled(false); equal(r.activate(26), false); r.setEnabled(true); equal(r.world.globals[1], 0);
+});
+
+test('first frame anchors after startup, 900 ticks catch up, and a 901-tick seek resumes after reset', { skip: !available }, () => {
+    const r = runtime(), initial = r.world;
+    const tick = () => r.world.programs.get('object:54')!.location.tick;
+    equal(tick(), 0); r.advanceTo(10000); equal(tick(), 0);
+    r.advanceTo(10900); equal(r.world, initial); equal(tick(), 900);
+    r.advanceTo(11801); ok(r.world !== initial); equal(tick(), 0);
+    r.advanceTo(11801); equal(tick(), 0);
+    r.advanceTo(11802); equal(tick(), 1);
 });
 
 test('unknown commands report original bank locations while other admitted owners continue', { skip: !available }, () => {

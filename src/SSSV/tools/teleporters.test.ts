@@ -3,12 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { buildObjects, indexObjectTable, parseObjectTable, installTeleporterTextures, TELEPORTER_TEXTURE_ID_BASE } from "../objects.js";
-import { readTeleporterStartup, teleporterFanAlpha, teleporterFanOffset, teleporterFrame, teleporterIsActive } from "../teleporters.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../level.js";
-import { parseCommands } from "../paths.js";
-import { LEVELS } from "../level_table.js";
-import type { LevelObjectPlacement } from "../level.js";
+import { buildObjects, indexObjectTable, parseObjectTable, installTeleporterTextures, TELEPORTER_TEXTURE_ID_BASE } from "../objects/objects.js";
+import { readTeleporterStartup, teleporterFanAlpha, teleporterFanOffset, teleporterFrame, teleporterIsActive } from "../objects/teleporters.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../core/level.js";
+import { parseCommands } from "../commands/paths.js";
+import { LEVELS } from "../core/level_table.js";
+import type { LevelObjectPlacement } from "../core/level.js";
 
 test("teleporter frames use big-endian RGBA16 and undo odd-row word swapping", () => {
     const segment = new ArrayBuffer(0xAB30);

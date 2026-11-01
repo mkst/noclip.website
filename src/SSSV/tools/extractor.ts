@@ -2,14 +2,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { isRNC, decompressRNC } from "../rnc.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseGeometry, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../level.js";
-import { BIOME_REGULAR_TEXTURES, BIOME_SEGMENTS, BIOME_TEXTURES, BILLBOARD_TABLE, LEVEL_REGULAR_TEXTURES, LEVELS, LEVEL_SEGMENT_ALIASES, LEVEL_TEXTURES, OBJECT_TABLE, SEGMENTS, WATER_TEXTURE } from "../level_table.js";
-import type { TextureEntry } from "../level_table.js";
-import { formatLevelName } from "../manifest.js";
-import type { ManifestLevel, ManifestSegment, ManifestTexture, SSSVManifest } from "../manifest.js";
+import { isRNC, decompressRNC } from "../core/rnc.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseGeometry, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../core/level.js";
+import { BIOME_REGULAR_TEXTURES, BIOME_SEGMENTS, BIOME_TEXTURES, BILLBOARD_TABLE, LEVEL_REGULAR_TEXTURES, LEVELS, LEVEL_SEGMENT_ALIASES, LEVEL_TEXTURES, OBJECT_TABLE, SEGMENTS, WATER_TEXTURE } from "../core/level_table.js";
+import type { TextureEntry } from "../core/level_table.js";
+import { formatLevelName } from "../core/manifest.js";
+import type { ManifestLevel, ManifestSegment, ManifestTexture, SSSVManifest } from "../core/manifest.js";
 import { assert } from "../../util.js";
-import { ARRIVAL_PARTICLE_IDS, LEVEL_EVENT_PARTICLE_IDS, particleDefinitionFile, SCRIPT_PARTICLE_IDS, TORCH_PARTICLE_ASSETS } from "../particle_assets.js";
+import { ARRIVAL_PARTICLE_IDS, LEVEL_EVENT_PARTICLE_IDS, particleDefinitionFile, SCRIPT_PARTICLE_IDS, TORCH_PARTICLE_ASSETS } from "../effects/particle_assets.js";
 
 const DEFAULT_ROM = "data/SSSV_Raw/rom.z64";
 const DEFAULT_OUT = "data/SSSV";

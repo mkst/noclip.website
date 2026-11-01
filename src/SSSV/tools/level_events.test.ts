@@ -3,15 +3,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { BoulderEventSimulation, cameraInEventRegion, readBoulderEvent } from "../level_events.js";
-import type { BoulderEventConfig } from "../level_events.js";
-import { buildBoulderEventVisuals } from "../level_event_renderer.js";
-import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../level.js";
-import { LEVEL_EVENT_PARTICLE_IDS, LEVEL_EVENT_TEXTURE_BASE, parseLevelEventParticleTextures, parseParticleDefinition } from "../particle_assets.js";
-import { parseCommands } from "../paths.js";
-import { indexObjectTable, parseObjectTable } from "../objects.js";
-import { parseMipmapBank } from "../texture.js";
-import { ParticleSimulation, particleProjectedHalfSize } from "../particles.js";
+import { BoulderEventSimulation, cameraInEventRegion, readBoulderEvent } from "../effects/level_events.js";
+import type { BoulderEventConfig } from "../effects/level_events.js";
+import { buildBoulderEventVisuals } from "../effects/level_event_renderer.js";
+import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../core/level.js";
+import { LEVEL_EVENT_PARTICLE_IDS, LEVEL_EVENT_TEXTURE_BASE, parseLevelEventParticleTextures, parseParticleDefinition } from "../effects/particle_assets.js";
+import { parseCommands } from "../commands/paths.js";
+import { indexObjectTable, parseObjectTable } from "../objects/objects.js";
+import { parseMipmapBank } from "../core/texture.js";
+import { createParticleSpriteSource, ParticleSimulation, particleProjectedHalfSize } from "../effects/particles.js";
 
 (globalThis as any).window = { debug: false };
 
@@ -128,7 +128,7 @@ test("stationary-camera simulation is independent of rendering frequency and sta
     run(a, 600); b.advanceTo(0, 640, 768); b.advanceTo(600, 640, 768);
     deepEqual([a.boulders, a.impacts, a.particles], [b.boulders, b.impacts, b.particles]);
     ok(a.spawnCount > 5); ok(a.impactCount > 4); ok(a.boulders.length <= 20); ok(a.particles.length <= 255);
-    const particles = new ParticleSimulation(null, null, null, a); particles.advanceTo(600);
+    const particles = new ParticleSimulation([createParticleSpriteSource(a, a.textureIds)]); particles.advanceTo(600);
     equal(particles.particles.length, a.particles.length);
     a.setEnabled(false); particles.advanceTo(600); equal(particles.particles.length, 0);
     equal(particleProjectedHalfSize(10, 100, 60, 32) / particleProjectedHalfSize(10, 100, 60), 31 / 15);

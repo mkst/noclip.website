@@ -4,12 +4,12 @@ import { test } from "node:test";
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { RainButtonRuntime, readRainButton } from "../buttons.js";
-import { computeLeverHandleMatrix, leverHandleOffset, stepLeverPhase } from "../lever_handle.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../level.js";
-import { buildObjects, indexObjectTable, parseObjectTable } from "../objects.js";
-import { parseCommands } from "../paths.js";
-import type { LevelObjectPlacement } from "../level.js";
+import { RainButtonRuntime, readRainButton } from "../objects/buttons.js";
+import { computeLeverHandleMatrix, leverHandleOffset, stepLeverPhase } from "../objects/lever_handle.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../core/level.js";
+import { buildObjects, indexObjectTable, parseObjectTable } from "../objects/objects.js";
+import { parseCommands } from "../commands/paths.js";
+import type { LevelObjectPlacement } from "../core/level.js";
 
 (globalThis as any).window = { debug: false };
 const p: LevelObjectPlacement = { id: 45, x: 100, y: 200, z: 300, angle: 0, zRotation: 0, unkC: 2, scale: 2048, commandReferenceIdx: 0, commandsLength: 0, unk12: 0, unk15: 0 };

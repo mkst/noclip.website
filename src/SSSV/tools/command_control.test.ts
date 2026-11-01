@@ -1,9 +1,9 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { CommandTickBudget, CommandVM, commandMath, commandSuccess } from "../command_vm.js";
-import { CommandWorld } from "../command_world.js";
-import { parseCommands } from "../paths.js";
+import { CommandTickBudget, CommandVM, commandMath, commandSuccess } from "../commands/command_vm.js";
+import { CommandWorld } from "../commands/command_world.js";
+import { parseCommands } from "../commands/paths.js";
 
 const record = (opcode: number, ...words: number[]) => opcode.toString(16).padStart(4, '0') + Array.from({ length: 4 }, (_, i) => ((words[i] ?? 0) & 65535).toString(16).padStart(4, '0')).join('');
 const stop = record(9), nop = record(0), state = (value: number) => record(15, value);

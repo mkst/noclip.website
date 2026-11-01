@@ -1,9 +1,9 @@
 import { deepEqual, equal, notDeepEqual, ok } from "node:assert/strict";
 import { test } from "node:test";
 import { mat4 } from "gl-matrix";
-import { sampleWoolVertex } from "../wool.js";
-import { updateAnimalWool } from "../animal_renderer.js";
-import type { AnimalWoolAnimation } from "../animal_renderer.js";
+import { sampleWoolVertex } from "../animals/wool.js";
+import { updateAnimalWool } from "../animals/animal_renderer.js";
+import type { AnimalWoolAnimation } from "../animals/animal_renderer.js";
 
 const rest = [
     { position: [33, -29, 7], normal: [106, -61, -20] },

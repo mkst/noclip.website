@@ -3,10 +3,10 @@ import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import { RSP_Geometry } from "../../TopGearRally/f3dex.js";
-import { buildObjects, parseObjectTable, REFLECTION_TEXTURE_ID_BASE } from "../objects.js";
-import { parseLevelDat } from "../level.js";
-import { parseI8Texture } from "../texture.js";
-import { RENDER_ALPHA, RENDER_OPAQUE } from "../terrain.js";
+import { buildObjects, parseObjectTable, REFLECTION_TEXTURE_ID_BASE } from "../objects/objects.js";
+import { parseLevelDat } from "../core/level.js";
+import { parseI8Texture } from "../core/texture.js";
+import { RENDER_ALPHA, RENDER_OPAQUE } from "../render/terrain.js";
 
 (globalThis as any).window = { debug: false };
 

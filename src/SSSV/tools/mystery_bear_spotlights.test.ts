@@ -4,10 +4,10 @@ import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import * as RDP from "../../Common/N64/RDP.js";
-import { MAP_X_POINTS, MAP_Z_POINTS } from "../level.js";
-import type { LevelMapEntry } from "../level.js";
-import { buildMysteryBearSpotlights, projectMysteryBearSpotlight, sampleMysteryBearSpotlights, SPOTLIGHT_VERTEX_CAPACITY, updateMysteryBearSpotlights } from "../mystery_bear_spotlights.js";
-import { parseI4Texture } from "../texture.js";
+import { MAP_X_POINTS, MAP_Z_POINTS } from "../core/level.js";
+import type { LevelMapEntry } from "../core/level.js";
+import { buildMysteryBearSpotlights, projectMysteryBearSpotlight, sampleMysteryBearSpotlights, SPOTLIGHT_VERTEX_CAPACITY, updateMysteryBearSpotlights } from "../animals/mystery_bear_spotlights.js";
+import { parseI4Texture } from "../core/texture.js";
 
 const placement = { id: 24, x: 1024, z: 1536, y: 80, rotation: 0, health: 127, unkC: 0, unkE: 0 };
 const spot = { x: placement.x, z: placement.z, height: 336, color: [1, 0, 1] as [number, number, number] };

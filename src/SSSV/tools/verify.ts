@@ -1,15 +1,14 @@
-import { FloorButtonVisuals } from '../floor_buttons.js';
-import { readLagoonMachine, LagoonMachineRuntime, MACHINE_ARMS, MACHINE_PADS, MACHINE_LEVERS } from '../lagoon_machine.js';
-import { LagoonMachineVisuals } from '../lagoon_machine_renderer.js';
-import { readSnowPlatforms, SnowPlatformRuntime } from "../snow_platforms.js";
-import { SnowPlatformVisuals } from "../snow_platform_renderer.js";
-import { readLiveAnimalSpawns, LiveAnimalSpawnRuntime } from "../live_animal_spawns.js";
-import { LiveAnimalSpawnVisuals } from "../live_animal_renderer.js";
-import { EmitterCommandRuntime } from "../emitter_commands.js";
-import { ObjectCommandRuntime, readObjectPrograms } from "../object_commands.js";
-import { readElevator } from "../elevator.js";
-import { buildElevatorVisuals } from "../elevator_renderer.js";
-import { buildArrivalVisuals, EntranceArrival, findArrivalEntrance } from "../arrival.js";
+import { FloorButtonVisuals } from '../objects/floor_buttons.js';
+import { LagoonMachineRuntime, MACHINE_ARMS, MACHINE_PADS, MACHINE_LEVERS } from '../objects/lagoon_machine.js';
+import { LagoonMachineVisuals } from '../objects/lagoon_machine_renderer.js';
+import { SnowPlatformRuntime } from "../objects/snow_platforms.js";
+import { SnowPlatformVisuals } from "../objects/snow_platform_renderer.js";
+import { LiveAnimalSpawnRuntime } from "../animals/live_animal_spawns.js";
+import { LiveAnimalSpawnVisuals } from "../animals/live_animal_renderer.js";
+import { EmitterCommandRuntime } from "../effects/emitter_commands.js";
+import { ObjectCommandRuntime, readObjectPrograms } from "../objects/object_commands.js";
+import { buildElevatorVisuals } from "../objects/elevator_renderer.js";
+import { buildArrivalVisuals, EntranceArrival } from "../effects/arrival.js";
 import { existsSync, readFileSync } from "fs";
 
 (globalThis as any).window = { debug: false };
@@ -17,32 +16,30 @@ import { existsSync, readFileSync } from "fs";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert, assertExists } from "../../util.js";
 import { RSP_Geometry, RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { BIOME_REGULAR_TEXTURES, BIOME_SEGMENTS, getLevelRegularTextureBank, LEVEL_OBJECT_TEXTURES, LEVEL_SEGMENT_ALIASES, LEVELS, WATER_TEXTURE } from "../level_table.js";
-import { findPayload, LevelPayloadType, mirrorZ, parseAnimals, parseGeometry, parseHangingObjects, parseLevelContainer, parseLevelDat, parseLinks, parseMap, parseObjects, parsePaths, parseScrollingTable } from "../level.js";
-import { parseI8Texture, parseMipmapBank, parseRegularBank } from "../texture.js";
-import { buildMap, buildTerrain, buildWater, installTerrainAnimationTextures, SSSVLayer } from "../terrain.js";
-import { BIOME_REGULAR_TEXTURE_ID_BASE, buildBillboards, buildObjects, indexObjectTable, installDynamicBillboardTextures, installReflectionTextures, installShadowTextures, installTeleporterTextures, LEVEL_REGULAR_TEXTURE_ID_BASE, parseObjectTable, parseObjectTextureBank } from "../objects.js";
-import type { SSSVBillboard } from "../objects.js";
-import { resolveFenceSpans } from "../fences.js";
-import { analyzePathUses, parseCommands } from "../paths.js";
-import { readObjectVisibility, readObjectStartupAppearance } from "../object_startup.js";
-import { applyStartupLighting, readStartupLighting } from "../lighting.js";
-import { createTorchEmitters, sampleParticleSurfaces, TorchSimulation } from "../particles.js";
-import { parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "../particle_assets.js";
-import { particleDefinitionFile, parseScriptParticleTextures, SCRIPT_PARTICLE_IDS, SCRIPT_PARTICLE_TEXTURE_BASE, SCRIPT_PARTICLE_TEXTURE_OFFSETS } from "../particle_assets.js";
-import { readPersistentEmitters } from "../particle_emitters.js";
-import { ScriptParticleSimulation } from "../script_particles.js";
-import { buildHangingRibbons, HangingSimulation, resolveHangingObject } from "../hanging.js";
-import { buildAnimalMarkers, createAnimalMarkers, createPlayerPlacement } from "../animals.js";
-import { createAnimalSpawnMarkers, readAbsoluteAnimalSpawns } from "../animal_spawns.js";
-import { BoulderEventSimulation, readBoulderEvent } from "../level_events.js";
-import { buildBoulderEventVisuals } from "../level_event_renderer.js";
-import { LEVEL_EVENT_PARTICLE_IDS, LEVEL_EVENT_TEXTURE_BASE, parseLevelEventParticleTextures } from "../particle_assets.js";
-import { DOG_STATIC_RECIPE, getDogStaticRecipe, getStaticAnimalRecipe } from "../animal_contracts.js";
-import { buildStaticAnimalModels } from "../animal_renderer.js";
-import { buildLampGlows, buildLeverLights, buildSwitchBalls } from "../switch_visuals.js";
-import { sampleWoolVertex } from "../wool.js";
-import { ANIMAL_EYE_ATLASES, sampleAnimalEyeFrame } from "../animal_eyes.js";
+import { BIOME_REGULAR_TEXTURES, getLevelRegularTextureBank, LEVEL_OBJECT_TEXTURES, LEVELS, WATER_TEXTURE } from "../core/level_table.js";
+import { mirrorZ, parseLevelContainer } from "../core/level.js";
+import { prepareLevel, prepareLevelFeatures } from "../core/level_preparation.js";
+import { parseI8Texture, parseMipmapBank, parseRegularBank } from "../core/texture.js";
+import { buildMap, buildTerrain, buildWater, installTerrainAnimationTextures, SSSVLayer } from "../render/terrain.js";
+import { applyStartupFanAnimation } from "../effects/terrain_fans.js";
+import { BIOME_REGULAR_TEXTURE_ID_BASE, buildBillboards, buildObjects, indexObjectTable, installDynamicBillboardTextures, installReflectionTextures, installShadowTextures, installTeleporterTextures, LEVEL_REGULAR_TEXTURE_ID_BASE, parseObjectTable, parseObjectTextureBank } from "../objects/objects.js";
+import type { SSSVBillboard } from "../objects/objects.js";
+import { readObjectVisibility, readObjectStartupAppearance } from "../objects/object_startup.js";
+import { applyStartupLighting } from "../render/lighting.js";
+import { sampleParticleSurfaces, TorchSimulation } from "../effects/particles.js";
+import { parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "../effects/particle_assets.js";
+import { particleDefinitionFile, parseScriptParticleTextures, SCRIPT_PARTICLE_IDS, SCRIPT_PARTICLE_TEXTURE_BASE, SCRIPT_PARTICLE_TEXTURE_OFFSETS } from "../effects/particle_assets.js";
+import { ScriptParticleSimulation } from "../effects/script_particles.js";
+import { buildHangingRibbons, HangingSimulation, resolveHangingObject } from "../objects/hanging.js";
+import { buildAnimalMarkers } from "../animals/animals.js";
+import { BoulderEventSimulation } from "../effects/level_events.js";
+import { buildBoulderEventVisuals } from "../effects/level_event_renderer.js";
+import { LEVEL_EVENT_PARTICLE_IDS, LEVEL_EVENT_TEXTURE_BASE, parseLevelEventParticleTextures } from "../effects/particle_assets.js";
+import { DOG_STATIC_RECIPE, getDogStaticRecipe, getStaticAnimalRecipe } from "../animals/animal_contracts.js";
+import { buildStaticAnimalModels } from "../animals/animal_renderer.js";
+import { buildLampGlows, buildLeverLights, buildSwitchBalls } from "../objects/switch_visuals.js";
+import { sampleWoolVertex } from "../animals/wool.js";
+import { ANIMAL_EYE_ATLASES, sampleAnimalEyeFrame } from "../animals/animal_eyes.js";
 
 function read(path: string): ArrayBufferSlice {
     return ArrayBufferSlice.fromView(readFileSync(path));
@@ -98,21 +95,11 @@ function verifyLevel(levelId: string): void {
     assert(entry !== undefined, `Unknown level ${levelId}`);
 
     const payloads = parseLevelContainer(read(`data/SSSV/levels/${entry.id}.bin`));
-    const datData = findPayload(payloads, LevelPayloadType.Dat);
-    const geoData = findPayload(payloads, LevelPayloadType.Geo);
-    assert(datData !== null, `${entry.id}: missing dat`);
-    assert(geoData !== null, `${entry.id}: missing geo`);
-
-    const dat = parseLevelDat(datData);
-    const geometry = parseGeometry(geoData, dat);
-    const scrollingData = findPayload(payloads, LevelPayloadType.Unknown14);
-    const scrollingTable = scrollingData !== null ? parseScrollingTable(scrollingData) : null;
-    const map = parseMap(assertExists(findPayload(payloads, LevelPayloadType.Map), `${entry.id}: map`));
-    const objects = parseObjects(assertExists(findPayload(payloads, LevelPayloadType.Cob), `${entry.id}: cob`));
-    const animals = parseAnimals(assertExists(findPayload(payloads, LevelPayloadType.Can), `${entry.id}: can`));
-    const player = createPlayerPlacement(dat, objects);
-    const hangingData = findPayload(payloads, LevelPayloadType.Cha);
-    const hanging = hangingData !== null ? parseHangingObjects(hangingData) : [];
+    const level = prepareLevel(payloads, entry.id);
+    const { dat, geometry, scrollingTable, map, objectPlacements: objects, animalPlacements: animals,
+        playerPlacement: player, hangingPlacements: hanging, biome, levelSegmentName, commands,
+        animalSpawns, animalSpawnMarkers: spawnMarkers, links, paths, pathAnalysis,
+        animalMarkers: markers, boulderEvent, arrivalEntrance: entrance, startupLighting } = level;
     for (const placement of hanging) {
         for (const index of [placement.anchorObjectIndex, placement.endObjectIndex])
             assert(index === -1 || resolveHangingObject(objects, index) !== null, `${entry.id}: hanging type ${placement.type} has invalid object reference ${index}`);
@@ -143,20 +130,15 @@ function verifyLevel(levelId: string): void {
         for (let i = 0; i < firstState[r].length; i++)
             assert(firstState[r][i] === hangingRibbons[r].points[i], `${entry.id}: hanging simulation is not deterministic`);
     }
-    const biome = BIOME_SEGMENTS[dat.segment] ?? null;
-    const levelSegmentName = LEVEL_SEGMENT_ALIASES[entry.id] ?? entry.id;
     const sharedOutput = new RSPSharedOutput();
     installTextures(sharedOutput, biome, entry.textureBank, dat.segment, dat.textureBank);
 
     const objectTable = indexObjectTable(parseObjectTable(read(`data/SSSV/objects.bin`)));
-    const commands = parseCommands(findPayload(payloads, LevelPayloadType.Cmd));
-    const animalSpawns = readAbsoluteAnimalSpawns(commands);
+    const { fences, torchEmitters: torches, emitterAnalysis, elevatorConfig, machineConfig,
+        snowConfig, liveSpawnConfig: liveConfig } = prepareLevelFeatures(level, objectTable);
     const expectedSpawns: Record<string, number> = { SMASHING_START: 1, RAT_O_MATIC: 1, GIVE_A_DOG_A_BONUS: 11, EVOS_ESCAPE: 3, PUNCHUP_PYRAMID: 3, BIG_CELEBRATION_PARADE: 10, INTRO: 13 };
     assert(animalSpawns.length === (expectedSpawns[entry.id] ?? 0), `${entry.id}: unexpected absolute animal spawn coverage`);
-    const spawnMarkers = createAnimalSpawnMarkers(animalSpawns, map);
     assert(spawnMarkers.length === animalSpawns.length && spawnMarkers.every(marker => marker.label.startsWith("SPAWN PREVIEW:")), `${entry.id}: missing spawn preview markers`);
-    const torches = createTorchEmitters(objects, objectTable);
-    const emitterAnalysis = readPersistentEmitters(objects, objectTable, commands);
     const expectedEmitters: Record<string, number[]> = { JUNGLE_JAPES: [10, 11, 12], JUNGLE_DOLDRUMS: [22, 23, 24, 25], SHIFTING_SANDS: [11, 13, 14, 15, 16, 17], SWAMP_OF_ETERNAL_STENCH: [80] };
     assert(JSON.stringify(emitterAnalysis.emitters.map(e => e.placementIndex)) === JSON.stringify(expectedEmitters[entry.id] ?? []), `${entry.id}: unexpected persistent emitter coverage`);
     if (emitterAnalysis.emitters.length !== 0) {
@@ -196,9 +178,6 @@ function verifyLevel(levelId: string): void {
         }
         assert(parseTorchParticleTextures(read(`data/SSSV/segments/segment1.bin`)).length === a.textureCount, `${entry.id}: missing torch textures`);
     }
-    const linkData = findPayload(payloads, LevelPayloadType.Joi);
-    const links = linkData !== null ? parseLinks(linkData) : [];
-    const fences = resolveFenceSpans(objects, objectTable, links);
     const levelSegment = read(`data/SSSV/segments/${levelSegmentName}.bin`);
     const objectTextures = parseObjectTextureBank(levelSegment, LEVEL_OBJECT_TEXTURES[levelSegmentName] ?? []);
     for (let i = 0; i < objectTextures.length; i++)
@@ -215,7 +194,10 @@ function verifyLevel(levelId: string): void {
     installTerrainAnimationTextures(sharedOutput, segmentBuffers[0x01]!);
 
     const drawCalls = buildTerrain(sharedOutput, geometry, dat, scrollingTable);
-    const markers = createAnimalMarkers(animals, player);
+    applyStartupFanAnimation(drawCalls, objects, commands);
+    const startupFans = drawCalls.filter(c => c.fanAnimation?.slot === 5 && c.animationFrameRate === 30);
+    assert(startupFans.length === (entry.id === "STINKY_SEWERS" ? 1 : 0), `${entry.id}: startup fan admission`);
+    assert(startupFans.every(c => !c.translucent && c.animationTextureIndices?.length === 4 && c.scrollStepS === 0 && c.scrollStepT === 0), `${entry.id}: startup fan binding`);
     assert(markers.length === animals.length + (player !== null ? 1 : 0), `${entry.id}: missing player marker`);
     if (player !== null) assert(markers[markers.length - 1].label.startsWith("PLAYER ("), `${entry.id}: player label is missing`);
     const water = buildWater(sharedOutput, map, dat, 300);
@@ -227,8 +209,6 @@ function verifyLevel(levelId: string): void {
     const upperLayer = buildMap(sharedOutput, map, dat, SSSVLayer.Upper);
     if (upperLayer !== null)
         drawCalls.push(upperLayer);
-    const paths = parsePaths(findPayload(payloads, LevelPayloadType.Paf));
-    const pathAnalysis = analyzePathUses(paths, commands, objects, animals, links);
     const startupHidden = objects.filter((placement) => {
         const mode = objectTable.get(placement.id)?.renderMode;
         if (mode !== 6 && mode !== 12) return false;
@@ -238,6 +218,9 @@ function verifyLevel(levelId: string): void {
     const expectedStartupHidden: Record<string, number> = { PENGUIN_PLAYPEN: 2, WALRACE_64: 1 };
     assert(startupHidden === (expectedStartupHidden[entry.id] ?? 0), `${entry.id}: unexpected startup-hidden object coverage`);
     const objectDrawCalls = buildObjects(sharedOutput, objects, objectTable, segmentBuffers, dat, commands, pathAnalysis);
+    const gravityArcs = objectDrawCalls.filter(c => c.gravitySwitch?.part === 'arcA' || c.gravitySwitch?.part === 'arcB');
+    assert(gravityArcs.length === (entry.id === "ROCKY_HARD_PLACE" ? 2 : 0), `${entry.id}: gravity arc coverage`);
+    assert(gravityArcs.every(c => c.indexCount === 96 && c.translucent && c.textureIndices.length === 0 && c.modelMatrix !== null), `${entry.id}: gravity arc binding`);
     const hiddenObjectIndices = new Set(objects.flatMap((placement, index) => readObjectVisibility(placement, commands).hidden ? [index] : []));
     assert(objectDrawCalls.every(draw => draw.objectPlacementIndex === null || !hiddenObjectIndices.has(draw.objectPlacementIndex)), `${entry.id}: hidden object submitted a mesh`);
     const teleporterFans = objectDrawCalls.filter(draw => draw.teleporter?.part === "fan");
@@ -325,7 +308,7 @@ function verifyLevel(levelId: string): void {
     }
     const players = animalBuilds.filter(build => build.isPlayer);
     const playerRecipe = player !== null ? getStaticAnimalRecipe(player) : null;
-    const expectedPlayer = playerRecipe !== null && (playerRecipe.biomeSegment ?? 0) === dat.segment;
+    const expectedPlayer = playerRecipe !== null && (playerRecipe.biomeSegment === "shared" || (playerRecipe.biomeSegment ?? 0) === dat.segment);
     assert(players.length === (expectedPlayer ? 1 : 0), `${entry.id}: missing supported player model`);
     for (const build of players) {
         assert(build.placementIndex === -1 && build.placement === player, `${entry.id}: player model changed authored indices`);
@@ -368,7 +351,7 @@ function verifyLevel(levelId: string): void {
     assert(foxes.length === (entry.id === "HONEYMOON_LAGOON" ? 2 : 0), `${entry.id}: unexpected FOX model coverage`);
     const expectedRacingFoxes: Record<string, number> = { THE_BATTERY_FARM: 2, STINKY_SEWERS: 1, RAT_O_MATIC: 3, ROCKY_HARD_PLACE: 1 };
     assert(racingFoxes.length === (expectedRacingFoxes[entry.id] ?? 0), `${entry.id}: unexpected RACING_FOX model coverage`);
-    assert(placedBuilds.length === animals.filter(animal => { const recipe = getStaticAnimalRecipe(animal); return recipe !== null && (recipe.biomeSegment ?? 0) === dat.segment; }).length, `${entry.id}: missing supported animal model`);
+    assert(placedBuilds.length === animals.filter(animal => { const recipe = getStaticAnimalRecipe(animal); return recipe !== null && (recipe.biomeSegment === "shared" || (recipe.biomeSegment ?? 0) === dat.segment); }).length, `${entry.id}: missing supported animal model`);
     const expectedSheep: Record<string, number> = { SMASHING_START: 4, HAVE_A_NICE_DAY: 4, HONEYMOON_LAGOON: 3, THE_BATTERY_FARM: 6, THE_ENGINE_ROOM: 1, FAT_BEAR_MOUNTAIN: 3, ROCKY_HARD_PLACE: 3, INTRO: 3 };
     assert(sheep.length === (expectedSheep[entry.id] ?? 0), `${entry.id}: unexpected SHEEP model coverage`);
     assert(dogs.length === expectedDogs, `${entry.id}: missing supported DOG model placement`);
@@ -565,11 +548,12 @@ function verifyLevel(levelId: string): void {
         assert(draws.every(draw => draw.textureIndices.length === 0 && (draw.SP_GeometryMode & RSP_Geometry.G_LIGHTING) !== 0), `${entry.id}: tail inherited an incorrect material`);
         assert(draws.every((draw, link) => draw.DP_PrimColor.every((v, i) => Math.abs(v - (elephant ? [148 / 255, 148 / 255, 148 / 255, 1] : husky ? [(tail.simulation.kind === "crazy-husky" ? [128, 183, 73] : [190, 212, 255])[link] / 255, 1, 1, 1] : [1, 0.6, 0.6, 1])[i]) < 1e-6)), `${entry.id}: tail lost source primitive color`);
     }
-    const bears = animalBuilds.filter(build => build.recipe.species === "BEAR" || build.recipe.species === "MYSTERY_BEAR");
+    const bears = animalBuilds.filter(build => build.recipe.species === "BEAR" || build.recipe.species === "CRAZY_BEAR" || build.recipe.species === "MYSTERY_BEAR");
     assert(bears.filter(build => !build.isPlayer && build.placement.id === 22).length === (["THE_ENGINE_ROOM", "FAT_BEAR_MOUNTAIN"].includes(entry.id) ? 1 : 0), `${entry.id}: missing BEAR placement`);
     assert(bears.filter(build => !build.isPlayer && build.placement.id === 24).length === (entry.id === "THE_ENGINE_ROOM" ? 1 : 0), `${entry.id}: missing MYSTERY_BEAR placement`);
+    assert(bears.filter(build => !build.isPlayer && build.placement.id === 23).length === (entry.id === "THE_ENGINE_ROOM" ? 2 : 0), `${entry.id}: missing CRAZY_BEAR placements`);
     for (const build of bears) {
-        assert(build.partMatrices.length === (build.placement.id === 24 ? 7 : 8) && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete BEAR`);
+        assert(build.partMatrices.length === (build.placement.id === 22 ? 8 : 7) && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete BEAR`);
         assert((build.mysteryBear !== null) === (build.placement.id === 24), `${entry.id}: incorrect Mystery Bear animation eligibility`);
         if (build.mysteryBear !== null) {
             const motion = build.mysteryBear;
@@ -578,12 +562,20 @@ function verifyLevel(levelId: string): void {
             assert(motion.spotlights?.draws.length === 2 && motion.spotlights.draws.every(draw => draw.textureIndices[0] === 601 && draw.layer === SSSVLayer.Animals && draw.translucent), `${entry.id}: missing Mystery Bear spotlights`);
         }
         const textures = build.textureIds.filter(id => !build.mysteryBear || ![...build.mysteryBear.balls, ...build.mysteryBear.spotlights!.draws].some(draw => draw.textureIndices.includes(id))).map(id => sharedOutput.textureCache.textures[id]);
-        assert(textures.every(t => t.dramAddr >= 0x010025A0 && t.dramAddr < 0x01002C20 && t.dramPalAddr === 0x01002C40), `${entry.id}: BEAR acquired a non-eye texture`);
+        assert(textures.every(t => build.placement.id === 23 ? t.dramAddr === 0x010224B0 && t.dramPalAddr === 0x010226B0 : t.dramAddr >= 0x010025A0 && t.dramAddr < 0x01002C20 && t.dramPalAddr === 0x01002C40), `${entry.id}: BEAR acquired a non-eye texture`);
         for (const part of build.partMatrices) {
             const mirrored = part.name === "front right leg" || part.name === "rear right leg";
             assert(part.flipsWinding === mirrored, `${entry.id}: incorrect BEAR winding`);
             assert(part.geometryModes.every(mode => (mode & (RSP_Geometry.G_CULL_FRONT | RSP_Geometry.G_CULL_BACK)) === 0 || (mode & (mirrored ? RSP_Geometry.G_CULL_FRONT : RSP_Geometry.G_CULL_BACK)) !== 0), `${entry.id}: incorrect BEAR culling ${part.name}`);
         }
+        if (!build.isPlayer) drawCalls.push(...build.drawCalls);
+    }
+    const walruses = animalBuilds.filter(build => build.recipe.species === "WALRUS");
+    const expectedWalruses: Record<string, number> = { ICE_N_EASY_DOES_IT: 3, SOMETHING_FISHY: 1, WALRACE_64: 2 };
+    assert(walruses.filter(build => !build.isPlayer).length === (expectedWalruses[entry.id] ?? 0), `${entry.id}: missing WALRUS placements`);
+    for (const build of walruses) {
+        assert(build.partMatrices.length === 8 && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete WALRUS`);
+        assert(build.drawCalls.every(draw => draw.animalEyeAnimation === null), `${entry.id}: WALRUS acquired eye overlays`);
         if (!build.isPlayer) drawCalls.push(...build.drawCalls);
     }
     const huskies = animalBuilds.filter(build => build.recipe.species === "HUSKY");
@@ -654,6 +646,13 @@ function verifyLevel(levelId: string): void {
         assert(build.drawCalls.filter(draw => draw.animalEyeAnimation !== null).length === 2, `${entry.id}: missing COOL_COD eyes`);
         if (!build.isPlayer) drawCalls.push(...build.drawCalls);
     }
+    const piranhas = animalBuilds.filter(build => build.recipe.species === "PIRANHA");
+    assert(piranhas.filter(build => !build.isPlayer).length === (["JUNGLE_JAPES", "WEIGHT_FOR_IT"].includes(entry.id) ? 3 : 0), `${entry.id}: missing PIRANHA placements`);
+    for (const build of piranhas) {
+        assert(build.partMatrices.length === 5 && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete PIRANHA`);
+        assert(build.drawCalls.filter(draw => draw.animalEyeAnimation !== null).length === 2, `${entry.id}: missing PIRANHA eyes`);
+        if (!build.isPlayer) drawCalls.push(...build.drawCalls);
+    }
     const penguins = animalBuilds.filter(build => build.placement.id === 37 || build.placement.id === 64);
     const expectedPenguins: Record<string, number> = { SNOW_JOKE: 5, PENGUIN_PLAYPEN: 3, PINBALL_BLIZZARD: 11, HOPPA_CHOPPA: 2 };
     assert(penguins.filter(build => !build.isPlayer && build.placement.id === 37).length === (expectedPenguins[entry.id] ?? 0), `${entry.id}: missing PENGUIN placements`);
@@ -667,7 +666,6 @@ function verifyLevel(levelId: string): void {
         assert(build.drawCalls.every(draw => draw.animalEyeAnimation === null), `${entry.id}: PENGUIN acquired invented eye animation`);
         if (!build.isPlayer) drawCalls.push(...build.drawCalls);
     }
-    const boulderEvent = readBoulderEvent(objects, commands, findPayload(payloads, LevelPayloadType.Rng));
     const expectedBoulderEvents: Record<string, number> = { ROCKY_HARD_PLACE: 5, JUNGLE_DOLDRUMS: 9 };
     assert((boulderEvent?.spawners.length ?? 0) === (expectedBoulderEvents[entry.id] ?? 0), `${entry.id}: unexpected scripted boulder event coverage`);
     if (boulderEvent !== null) {
@@ -693,7 +691,6 @@ function verifyLevel(levelId: string): void {
         assert(visuals.drawCalls.every(draw => !draw.visible) && simulation.particles.length === 0, `${entry.id}: disabling scripted events retained effects`);
         drawCalls.push(...visuals.drawCalls);
     }
-    const entrance = findArrivalEntrance(objects);
     if (entrance !== null) {
         const simulation = new EntranceArrival(entrance.placement, entrance.index, parseParticleDefinition(read(`data/SSSV/${particleDefinitionFile(35)}`)), map);
         const arrival = buildArrivalVisuals(sharedOutput, simulation, segmentBuffers[1]!);
@@ -708,7 +705,6 @@ function verifyLevel(levelId: string): void {
         assert(simulation.entranceState === null && simulation.particles.length === 0, `${entry.id}: arrival failed to reset`);
         drawCalls.push(arrival.draw);
     }
-    const elevatorConfig = readElevator(objects, commands, objectTable, map);
     assert((elevatorConfig !== null) === (entry.id === "HONEYMOON_LAGOON"), `${entry.id}: unexpected elevator admission`);
     if (elevatorConfig !== null) {
         const textures = [...sharedOutput.textureCache.textures];
@@ -726,9 +722,12 @@ function verifyLevel(levelId: string): void {
         assert(elevator.drawCalls.every(c => !c.visible) && runtime.world.objects.size === 1, `${entry.id}: elevator disable`);
         drawCalls.push(...elevator.drawCalls);
     }
-    const objectPrograms = readObjectPrograms(objects, commands, objectTable);
-    const expectedObjectPrograms: Record<string, number> = { PUNCHUP_PYRAMID: 18, SOMETHING_FISHY: 2, EVOS_ESCAPE: 1, BIG_CELEBRATION_PARADE: 1, CREDITS: 1, SWAMP_OF_ETERNAL_STENCH: 1 };
+    const objectPrograms = readObjectPrograms(objects, commands, objectTable, drawCalls);
+    const expectedObjectPrograms: Record<string, number> = { PUNCHUP_PYRAMID: 18, THE_ENGINE_ROOM: 11, SOMETHING_FISHY: 2, EVOS_ESCAPE: 1, BIG_CELEBRATION_PARADE: 5, CREDITS: 1, SWAMP_OF_ETERNAL_STENCH: 1, GIVE_A_DOG_A_BONUS: 1 };
     assert(objectPrograms.length === (expectedObjectPrograms[entry.id] ?? 0), `${entry.id}: unexpected object program admission`);
+    const expectedAutonomous: Record<string, number[]> = { GIVE_A_DOG_A_BONUS: [37], BIG_CELEBRATION_PARADE: [100, 101, 105, 106] };
+    assert(JSON.stringify(objectPrograms.filter(c => c.kind === 'autonomous-motion').map(c => c.placementIndex))
+        === JSON.stringify(expectedAutonomous[entry.id] ?? []), `${entry.id}: unexpected autonomous owner`);
     if (objectPrograms.length) {
         const counts = [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length];
         const runtime = new ObjectCommandRuntime(objectPrograms, commands, objectTable, drawCalls);
@@ -736,7 +735,9 @@ function verifyLevel(levelId: string): void {
         for (let tick = 1; tick <= 300; tick++) runtime.advanceTo(tick);
         assert(runtime.entries.every(e => e.vm.diagnostic === null && e.calls.length > 0), `${entry.id}: object program/binding fault`);
         for (const e of runtime.entries) for (const call of e.calls) {
-            if (e.config.kind === "material") assert(call.commandTextureFrame !== null && call.commandTextureFrame >= 0 && call.commandTextureFrame < 4, `${entry.id}: invalid command texture frame`);
+            if (e.config.kind === "material") assert(call.commandTextureFrame !== null && call.commandTextureFrame >= 0 && call.commandTextureFrame < e.config.materials!.length, `${entry.id}: invalid command texture frame`);
+            else if (e.config.kind === 'autonomous-motion') assert(call.objectMotion === null && call.objectRotation === null && call.modelMatrix !== null
+                && call.modelMatrix.every(Number.isFinite) && call.center.every(Number.isFinite), `${entry.id}: autonomous transform ownership`);
             else assert(call.objectMotion === null && call.objectRotation?.rotation.yPerTick === 0 && call.objectRotation.rotation.zPerTick === 0, `${entry.id}: duplicate animation writer`);
         }
         runtime.reset();
@@ -746,7 +747,6 @@ function verifyLevel(levelId: string): void {
     floorButtons.update(true);
     assert(floorButtons.calls.length === objects.filter(p => p.id === 42).length * 3, `${entry.id}: floor-button parts`);
     assert(floorButtons.calls.filter(c => c.floorButton!.part === 'glow').every(c => !c.visible), `${entry.id}: inactive floor glow`);
-    const machineConfig = readLagoonMachine(objects, commands, objectTable, links, findPayload(payloads, LevelPayloadType.Rng), player);
     assert((machineConfig !== null) === (entry.id === 'HONEYMOON_LAGOON'), `${entry.id}: machine admission`);
     if (machineConfig) {
         const runtime = new LagoonMachineRuntime(machineConfig), visual = new LagoonMachineVisuals(runtime, drawCalls, fences);
@@ -773,7 +773,6 @@ function verifyLevel(levelId: string): void {
         for (let i = 0; i < 3; i++) { runtime.setEnabled(true); runtime.reset(); visual.update(true); runtime.setEnabled(false); visual.update(true); }
         assert(counts.every((n, i) => n === [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length, drawCalls.length][i]), `${entry.id}: machine resource growth`);
     }
-    const snowConfig = readSnowPlatforms(objects, commands, objectTable, paths, links);
     assert((snowConfig !== null) === (entry.id === "SNOW_JOKE"), `${entry.id}: platform VM admission`);
     if (snowConfig) {
         const runtime = new SnowPlatformRuntime(snowConfig), visual = new SnowPlatformVisuals(runtime, drawCalls);
@@ -795,7 +794,6 @@ function verifyLevel(levelId: string): void {
         assert(drawCalls.filter(c => c.objectPathMotion).length === 3, `${entry.id}: platform preview restoration`);
         assert(counts[0] === sharedOutput.vertices.length && counts[1] === sharedOutput.indices.length, `${entry.id}: platform resource growth`);
     }
-    const liveConfig = readLiveAnimalSpawns(objects, commands, map, player);
     assert((liveConfig !== null) === (entry.id === "GIVE_A_DOG_A_BONUS"), `${entry.id}: live spawn admission`);
     if (liveConfig) {
         const runtime = new LiveAnimalSpawnRuntime(liveConfig), visual = new LiveAnimalSpawnVisuals(runtime, sharedOutput, allAnimalBuilds);
@@ -814,7 +812,7 @@ function verifyLevel(levelId: string): void {
         assert(visual.drawCalls.every(c => !c.visible), `${entry.id}: live spawn reset retained draw calls`);
         assert(counts.every((n, i) => n === [sharedOutput.vertices.length, sharedOutput.indices.length, sharedOutput.textureCache.textures.length][i]), `${entry.id}: live spawn resource growth`);
     }
-    applyStartupLighting(drawCalls, readStartupLighting(commands, objects, animals));
+    applyStartupLighting(drawCalls, startupLighting);
     const referencedIndices = new Set<number>();
     for (const drawCall of drawCalls) {
         assert(drawCall.firstIndex + drawCall.indexCount <= sharedOutput.indices.length, `${entry.id}: draw call index range out of bounds`);

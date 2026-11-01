@@ -1,8 +1,8 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import { mat4 } from "gl-matrix";
-import { advanceAnimalTail, animalTailMatrix, createAnimalTail } from "../animal_tails.js";
-import { LEVEL_Z_MIRROR } from "../level.js";
+import { advanceAnimalTail, animalTailMatrix, createAnimalTail } from "../animals/animal_tails.js";
+import { LEVEL_Z_MIRROR } from "../core/level.js";
 
 const placement = { id: 18, x: 700, z: 900, y: 80, rotation: 0, health: 127, unkC: 0, unkE: 0 };
 const origin = { x: 0, z: 0, y: 0 };

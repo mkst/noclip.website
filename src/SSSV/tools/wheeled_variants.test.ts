@@ -6,10 +6,10 @@ import { RSP_Geometry, RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import { TexCM } from "../../Common/N64/Image.js";
 import { RACING_TORTOISE_STATIC_RECIPE } from "../animals/racing_tortoise.js";
 import { HYENA_BIKER_STATIC_RECIPE } from "../animals/hyena_biker.js";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
-import { buildStaticAnimalModels } from "../animal_renderer.js";
-import { buildAnimalMarkers, createAnimalMarkers, createPlayerPlacement } from "../animals.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../level.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
+import { buildStaticAnimalModels } from "../animals/animal_renderer.js";
+import { buildAnimalMarkers, createAnimalMarkers, createPlayerPlacement } from "../animals/animals.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../core/level.js";
 
 (globalThis as any).window = { debug: false };
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));

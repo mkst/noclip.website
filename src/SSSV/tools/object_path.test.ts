@@ -3,11 +3,11 @@ import { test } from "node:test";
 import { existsSync, readFileSync } from "node:fs";
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import type { LevelObjectPlacement, LevelPath } from "../level.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLinks, parseObjects, parsePaths } from "../level.js";
-import { computeObjectPathMatrix, computeObjectPathPosition, readObjectPathPilot } from "../object_path.js";
-import type { ObjectPathTransform } from "../object_path.js";
-import { analyzePathUses, parseCommands } from "../paths.js";
+import type { LevelObjectPlacement, LevelPath } from "../core/level.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLinks, parseObjects, parsePaths } from "../core/level.js";
+import { computeObjectPathMatrix, computeObjectPathPosition, readObjectPathPilot } from "../objects/object_path.js";
+import type { ObjectPathTransform } from "../objects/object_path.js";
+import { analyzePathUses, parseCommands } from "../commands/paths.js";
 
 const placement: LevelObjectPlacement = { id: 94, x: 0, z: 0, y: 0, angle: 0, zRotation: 0, scale: 0x800, unkC: 0, commandReferenceIdx: 1, commandsLength: 0, unk12: 0, unk15: 0 };
 const paths: LevelPath[] = [{ index: 0, waypoints: [{ x: 0, z: 0, y: 0 }, { x: 10, z: 0, y: 0 }, { x: 10, z: 10, y: 0 }, { x: 0, z: 10, y: 0 }] }];

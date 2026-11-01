@@ -3,8 +3,8 @@ import { createHash } from "crypto";
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert } from "../../util.js";
-import { decompressRNC } from "../rnc.js";
-import { findPayload, LevelPayloadType, parseGeometry, parseLevelContainer, parseLevelDat } from "../level.js";
+import { decompressRNC } from "../core/rnc.js";
+import { findPayload, LevelPayloadType, parseGeometry, parseLevelContainer, parseLevelDat } from "../core/level.js";
 
 interface Args {
     rom: string;

@@ -1,6 +1,6 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
 import { RACING_MOUSE_STATIC_RECIPE, RACING_MOUSE_DEACTIVATED_RECIPE } from "../animals/mouse.js";
 
 test("RACING_MOUSE retains fixed wheel supports and the body-before-head displacement", () => {

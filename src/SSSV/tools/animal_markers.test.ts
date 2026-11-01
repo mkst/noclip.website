@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { buildAnimalMarkers, createAnimalMarkers, isAnimalMarkerVisible } from "../animals.js";
-import { buildStaticAnimalModels } from "../animal_renderer.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseMap } from "../level.js";
-import type { LevelAnimalPlacement } from "../level.js";
+import { buildAnimalMarkers, createAnimalMarkers, isAnimalMarkerVisible } from "../animals/animals.js";
+import { buildStaticAnimalModels } from "../animals/animal_renderer.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseMap } from "../core/level.js";
+import type { LevelAnimalPlacement } from "../core/level.js";
 
 (globalThis as any).window = { debug: false };
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));

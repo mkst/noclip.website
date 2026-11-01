@@ -1,13 +1,13 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { MAP_X_POINTS, MAP_Z_POINTS } from "../level.js";
-import type { LevelMapEntry, LevelObjectPlacement } from "../level.js";
-import type { SSSVObjectData } from "../objects.js";
-import { parseCommands } from "../paths.js";
-import { packParticleColor, persistentEmissionCount, readPersistentEmitters } from "../particle_emitters.js";
-import { parseParticleDefinition, parseScriptParticleTextures, SCRIPT_PARTICLE_TEXTURE_OFFSETS } from "../particle_assets.js";
-import { ScriptParticleSimulation, spawnScriptParticle } from "../script_particles.js";
+import { MAP_X_POINTS, MAP_Z_POINTS } from "../core/level.js";
+import type { LevelMapEntry, LevelObjectPlacement } from "../core/level.js";
+import type { SSSVObjectData } from "../objects/objects.js";
+import { parseCommands } from "../commands/paths.js";
+import { packParticleColor, persistentEmissionCount, readPersistentEmitters } from "../effects/particle_emitters.js";
+import { parseParticleDefinition, parseScriptParticleTextures, SCRIPT_PARTICLE_TEXTURE_OFFSETS } from "../effects/particle_assets.js";
+import { ScriptParticleSimulation, spawnScriptParticle } from "../effects/script_particles.js";
 
 const rawDefinitions: [number, string][] = [
     [19, "00000100005a00000000001401067bff7bff000000000000"],

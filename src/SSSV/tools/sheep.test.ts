@@ -1,8 +1,8 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
 import { SHEEP_STATIC_RECIPE } from "../animals/sheep.js";
-import { computeAnimalLimbMatrix } from "../animal_matrix.js";
+import { computeAnimalLimbMatrix } from "../animals/animal_matrix.js";
 
 test("standing SHEEP retains source support dimensions, rigid feet and vertical body/head anchors", () => {
     const recipe = SHEEP_STATIC_RECIPE, p = recipe.pose.sample;

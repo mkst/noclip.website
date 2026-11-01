@@ -2,11 +2,11 @@ import { deepEqual, equal, ok } from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import type { LevelObjectPlacement } from "../level.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseObjects } from "../level.js";
-import { indexObjectTable, parseObjectTable } from "../objects.js";
-import { analyzeObjectRoles, describeObjectRoleReferences } from "../object_roles.js";
-import { parseCommands } from "../paths.js";
+import type { LevelObjectPlacement } from "../core/level.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseObjects } from "../core/level.js";
+import { indexObjectTable, parseObjectTable } from "../objects/objects.js";
+import { analyzeObjectRoles, describeObjectRoleReferences } from "../objects/object_roles.js";
+import { parseCommands } from "../commands/paths.js";
 
 const placement: LevelObjectPlacement = { id: 2, x: 0, y: 0, z: 0, angle: 0, zRotation: 0, unkC: 40, scale: 2048, commandReferenceIdx: 1, commandsLength: 0, unk12: 0, unk15: 0 };
 function commands(...records: number[][]) {

@@ -5,10 +5,10 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import { GORILLA_STATIC_RECIPE } from "../animals/gorilla.js";
 import { TORTOISE_TANK_STATIC_RECIPE } from "../animals/tortoise_tank.js";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
-import { buildStaticAnimalModels } from "../animal_renderer.js";
-import { createPlayerPlacement } from "../animals.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../level.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
+import { buildStaticAnimalModels } from "../animals/animal_renderer.js";
+import { createPlayerPlacement } from "../animals/animals.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap, parseObjects } from "../core/level.js";
 
 (globalThis as any).window = { debug: false };
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));

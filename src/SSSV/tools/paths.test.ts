@@ -2,7 +2,7 @@ import { deepStrictEqual, throws } from "node:assert/strict";
 import { test } from "node:test";
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { parsePaths } from "../level.js";
+import { parsePaths } from "../core/level.js";
 
 function payload(bytes: number[]): ArrayBufferSlice {
     return ArrayBufferSlice.fromView(Uint8Array.from(bytes));

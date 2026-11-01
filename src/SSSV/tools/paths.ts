@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLinks, parseMap, parseObjects, parsePaths } from "../level.js";
-import { LEVELS } from "../level_table.js";
-import { analyzePathUses, createGroundSnappedPathDisplayVariants, parseCommands } from "../paths.js";
-import type { PathRole } from "../paths.js";
+import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLinks, parseMap, parseObjects, parsePaths } from "../core/level.js";
+import { LEVELS } from "../core/level_table.js";
+import { analyzePathUses, createGroundSnappedPathDisplayVariants, parseCommands } from "../commands/paths.js";
+import type { PathRole } from "../commands/paths.js";
 
 const args = process.argv.slice(2);
 const levels = args.includes("--all") ? LEVELS : LEVELS.filter((level) => level.id === (args[0] ?? "SMASHING_START"));

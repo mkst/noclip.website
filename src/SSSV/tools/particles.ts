@@ -3,8 +3,8 @@ import { join } from "path";
 import { PNG } from "pngjs";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { assert } from "../../util.js";
-import type { SSSVManifest } from "../manifest.js";
-import { parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "../particle_assets.js";
+import type { SSSVManifest } from "../core/manifest.js";
+import { parseParticleDefinition, parseTorchDriftTable, parseTorchParticleTextures, TORCH_PARTICLE_ASSETS } from "../effects/particle_assets.js";
 
 function read(path: string): ArrayBufferSlice {
     return ArrayBufferSlice.fromView(readFileSync(path));

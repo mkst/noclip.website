@@ -2,12 +2,12 @@ import { deepEqual, equal, match, ok, throws } from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { CommandTickBudget, CommandVM } from "../command_vm.js";
-import type { CommandVMConfig } from "../command_vm.js";
-import { CommandWorld } from "../command_world.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseObjects } from "../level.js";
-import { parseCommands } from "../paths.js";
-import type { LevelCommand } from "../paths.js";
+import { CommandTickBudget, CommandVM } from "../commands/command_vm.js";
+import type { CommandVMConfig } from "../commands/command_vm.js";
+import { CommandWorld } from "../commands/command_world.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseObjects } from "../core/level.js";
+import { parseCommands } from "../commands/paths.js";
+import type { LevelCommand } from "../commands/paths.js";
 
 // JUNGLE_DOLDRUMS C259–273. Expected ticks below come from the source runner's
 // delay post-decrement and jump advancement, not the existing rain interpreter.

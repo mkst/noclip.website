@@ -1,10 +1,10 @@
 import { deepEqual, equal, throws } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import type { LevelAnimalPlacement, LevelObjectPlacement } from "../level.js";
-import { parseCommands } from "../paths.js";
-import { readStartupMusic } from "../music_startup.js";
-import { parseMusicCatalog } from "../music.js";
+import type { LevelAnimalPlacement, LevelObjectPlacement } from "../core/level.js";
+import { parseCommands } from "../commands/paths.js";
+import { readStartupMusic } from "../audio/music_startup.js";
+import { parseMusicCatalog } from "../audio/music.js";
 
 const object: LevelObjectPlacement = {
     id: 55, x: 0, y: 0, z: 0, zRotation: 0, angle: 0, unkC: 0, scale: 2048,

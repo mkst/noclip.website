@@ -2,9 +2,9 @@ import { deepEqual, equal, ok } from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import { createAnimalSpawnMarkers, readAbsoluteAnimalSpawns } from "../animal_spawns.js";
-import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, mirrorZ, parseLevelContainer } from "../level.js";
-import { parseCommands } from "../paths.js";
+import { createAnimalSpawnMarkers, readAbsoluteAnimalSpawns } from "../animals/animal_spawns.js";
+import { findPayload, LevelPayloadType, MAP_X_POINTS, MAP_Z_POINTS, mirrorZ, parseLevelContainer } from "../core/level.js";
+import { parseCommands } from "../commands/paths.js";
 
 function commands(...records: number[][]) {
     const bytes = Uint8Array.from([0, 0, ...records.flatMap(([op, ...payload]) => [0, op, ...Array.from({ length: 8 }, (_, i) => payload[i] ?? 0)])]);

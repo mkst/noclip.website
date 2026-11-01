@@ -4,9 +4,9 @@ import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSP_Geometry, RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import { PENGUIN_STATIC_RECIPE, KING_PENGUIN_STATIC_RECIPE, KING_PENGUIN_DEACTIVATED_RECIPE } from "../animals/penguin.js";
-import { getStaticAnimalRecipe } from "../animal_contracts.js";
-import { buildStaticAnimalModels } from "../animal_renderer.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseMap, parseAnimals } from "../level.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
+import { buildStaticAnimalModels } from "../animals/animal_renderer.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseMap, parseAnimals } from "../core/level.js";
 
 (globalThis as any).window = { debug: false };
 const read = (path: string) => ArrayBufferSlice.fromView(readFileSync(path));

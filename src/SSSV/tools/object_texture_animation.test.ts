@@ -1,9 +1,9 @@
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import type { LevelObjectPlacement } from "../level.js";
-import { parseCommands } from "../paths.js";
-import { readObjectTextureAnimation, textureAnimationFrame } from "../object_texture_animation.js";
+import type { LevelObjectPlacement } from "../core/level.js";
+import { parseCommands } from "../commands/paths.js";
+import { readObjectTextureAnimation, textureAnimationFrame } from "../objects/object_texture_animation.js";
 
 const placement: LevelObjectPlacement = {
     id: 88, x: 0, y: 0, z: 0, angle: 0, zRotation: 0, unkC: 28, scale: 4096,

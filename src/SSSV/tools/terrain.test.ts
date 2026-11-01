@@ -4,10 +4,10 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSP_Geometry, RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
 import { decodeCombineParams } from "../../Common/N64/RDP.js";
 import type { CombineParams } from "../../Common/N64/RDP.js";
-import { parseLevelDat } from "../level.js";
-import type { GeometryFace } from "../level.js";
-import { buildTerrain, COMBINE_TEXTURED, COMBINE_TRANSLUCENT_VERTEX_ALPHA, FAN_TEXTURE_ID_BASE, WATER_TEXTURE_ID } from "../terrain.js";
-import { parseI8Texture } from "../texture.js";
+import { parseLevelDat } from "../core/level.js";
+import type { GeometryFace } from "../core/level.js";
+import { buildTerrain, COMBINE_TEXTURED, COMBINE_TRANSLUCENT_VERTEX_ALPHA, FAN_TEXTURE_ID_BASE, WATER_TEXTURE_ID } from "../render/terrain.js";
+import { parseI8Texture } from "../core/texture.js";
 
 const dat = parseLevelDat(new ArrayBufferSlice(new ArrayBuffer(0xA0)));
 
@@ -77,10 +77,33 @@ test("shade-only faces batch separately from missing textures and special materi
     const faces = [face(0x20, 0, 254), face(0x22, 0, 254), face(0x20, 31, 89), face(0x120, 0, 89)];
     const draws = buildTerrain(output(), { faces, trailingBytes: 0 }, dat);
     equal(draws.length, 3);
-    const stage = draws.find(draw => (draw.SP_GeometryMode & RSP_Geometry.G_FOG) === 0);
+    const stage = draws.find(draw => draw.indexCount === 6);
     ok(stage);
     equal(stage.indexCount, 6);
     deepEqual(stage.textureIndices, []);
+    equal(stage.SP_GeometryMode & RSP_Geometry.G_FOG, 0);
+});
+
+test("ordinary translucent terrain below texture 32 disables fog without affecting other material branches", () => {
+    for (const texture of [0, 1, 23, 31]) {
+        for (const flags of [0x20, 0x22, 0x4021]) {
+            const [draw] = buildTerrain(output(), { faces: [face(flags, texture, 89)], trailingBytes: 0 }, dat);
+            equal(draw.SP_GeometryMode & RSP_Geometry.G_FOG, 0, `texture ${texture}, flags ${flags}`);
+        }
+    }
+    for (const [flags, texture] of [[0, 1], [0x40, 1], [0x8000, 1], [0x120, 1], [0x30, 1], [0x220, 1], [0x20, 32], [0x20, 40], [0x20, 41]]) {
+        const [draw] = buildTerrain(output(), { faces: [face(flags, texture, 89)], trailingBytes: 0 }, dat);
+        ok(draw.SP_GeometryMode & RSP_Geometry.G_FOG, `texture ${texture}, flags ${flags}`);
+    }
+});
+
+test("missing-texture fallbacks with different fog eligibility cannot share a terrain batch", () => {
+    for (const textures of [[31, 32], [32, 31]]) {
+        const draws = buildTerrain(output(), { faces: textures.map(t => face(0x20, t, 89)), trailingBytes: 0 }, dat);
+        equal(draws.length, 2);
+        equal(draws.filter(d => (d.SP_GeometryMode & RSP_Geometry.G_FOG) === 0).length, 1);
+        ok(draws.every(d => d.textureIndices.length === 0 && d.indexCount === 3));
+    }
 });
 
 test("opaque terrain remains opaque and untextured translucent terrain retains shade alpha", () => {

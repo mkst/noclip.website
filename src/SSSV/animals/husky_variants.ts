@@ -1,4 +1,4 @@
-import type { AnimalModelRecipe } from "../animal_contracts.js";
+import type { AnimalModelRecipe } from "./animal_contracts.js";
 import { HUSKY_STATIC_RECIPE, huskyPart as part } from "./husky.js";
 
 export const SKI_HUSKY_STATIC_RECIPE: AnimalModelRecipe = {

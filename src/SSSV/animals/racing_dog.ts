@@ -1,4 +1,4 @@
-import type { AnimalModelRecipe, AnimalPartAttachment } from "../animal_contracts.js";
+import type { AnimalModelRecipe, AnimalPartAttachment } from "./animal_contracts.js";
 
 export function createRacingDogRecipes(dog: AnimalModelRecipe): [AnimalModelRecipe, AnimalModelRecipe] {
     const part = (order: number, name: string, address: number, from: number, to: number, mirror: 0 | 1 = 0): AnimalPartAttachment => ({

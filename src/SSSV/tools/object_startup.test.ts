@@ -3,13 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import type { LevelObjectPlacement } from "../level.js";
-import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../level.js";
-import { buildObjects, parseObjectTable } from "../objects.js";
-import { readObjectStartupAppearance } from "../object_startup.js";
-import { parseCommands } from "../paths.js";
-import { parseI8Texture } from "../texture.js";
-import { RENDER_ALPHA, RENDER_OPAQUE, SSSVLayer } from "../terrain.js";
+import type { LevelObjectPlacement } from "../core/level.js";
+import { findPayload, LevelPayloadType, parseLevelContainer, parseLevelDat, parseObjects } from "../core/level.js";
+import { buildObjects, parseObjectTable } from "../objects/objects.js";
+import { readObjectStartupAppearance } from "../objects/object_startup.js";
+import { parseCommands } from "../commands/paths.js";
+import { parseI8Texture } from "../core/texture.js";
+import { RENDER_ALPHA, RENDER_OPAQUE, SSSVLayer } from "../render/terrain.js";
 
 (globalThis as any).window = { debug: false };
 
@@ -80,6 +80,14 @@ test("material 40 startup writes suppress mesh and shadow without mutating place
     equal(render([[0x33, 0, 40], [0x57], [0x09]]).draws.length, 0);
     equal(render([[0x33, 0, 0xE8], [0x09]]).draws.length, 0);
     ok(render([[0x09]]).draws.length >= 2);
+});
+
+test("shadow suppression follows effective startup material rather than authored translucency", () => {
+    const translucent = render([[0x33, 0, 0x81], [0x09]]).draws;
+    ok(translucent.length > 0);
+    equal(translucent.filter(d => d.shadowFadeExponent !== null).length, 0);
+    const opaque = render([[0x33, 0, 1], [0x09]], 6, [0x81]).draws;
+    equal(opaque.filter(d => d.shadowFadeExponent !== null).length, 1);
 });
 
 test("startup material changes preserve texture zero and update inherited cutout state", () => {

@@ -1,8 +1,8 @@
 import { deepStrictEqual, equal } from "node:assert/strict";
 import { test } from "node:test";
-import { sampleAnimalSpawnGroundHeight, resolveAnimalSpawnY } from "../animal_renderer.js";
-import type { LevelAnimalPlacement, LevelMapEntry } from "../level.js";
-import { MAP_X_POINTS, MAP_Z_POINTS } from "../level.js";
+import { sampleAnimalSpawnGroundHeight, resolveAnimalSpawnY } from "../animals/animal_renderer.js";
+import type { LevelAnimalPlacement, LevelMapEntry } from "../core/level.js";
+import { MAP_X_POINTS, MAP_Z_POINTS } from "../core/level.js";
 
 function emptyMap(): LevelMapEntry[] {
     return Array.from({ length: MAP_X_POINTS * MAP_Z_POINTS }, () => ({
