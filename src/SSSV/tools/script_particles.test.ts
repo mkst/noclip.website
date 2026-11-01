@@ -1,11 +1,11 @@
-import { deepEqual, equal, ok } from "node:assert/strict";
+import { deepEqual, equal, ok, throws } from "node:assert/strict";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { MAP_X_POINTS, MAP_Z_POINTS } from "../core/level.js";
 import type { LevelMapEntry, LevelObjectPlacement } from "../core/level.js";
 import type { SSSVObjectData } from "../objects/objects.js";
 import { parseCommands } from "../commands/paths.js";
-import { packParticleColor, persistentEmissionCount, readPersistentEmitters } from "../effects/particle_emitters.js";
+import { applyEmitterCommand, createEmitterConfiguration, packParticleColor, persistentEmissionCount, readPersistentEmitters } from "../effects/particle_emitters.js";
 import { parseParticleDefinition, parseScriptParticleTextures, SCRIPT_PARTICLE_TEXTURE_OFFSETS } from "../effects/particle_assets.js";
 import { ScriptParticleSimulation, spawnScriptParticle } from "../effects/script_particles.js";
 
@@ -163,4 +163,61 @@ test("Swamp recognition rejects changes to control flow, setup and helper target
         equal(a.emitters.length, 0); ok(a.provenance[0].unsupportedReason);
     }
     equal(readPersistentEmitters([{ ...swampPlacement, commandsLength: 1 }], swampTable, script(swampRows())).emitters.length, 0);
+});
+
+
+test("static admission keeps its narrower policy even when the shared runtime applicator accepts a command", () => {
+    for (const record of [
+        "001700897a161f000000", // Live flag 0x89.
+        "0017000925161f000000", // Particle 37 needs the audited Swamp program.
+        "001700097a1600000000", // Runtime configuration permits a zero-size wrapper.
+    ]) {
+        const command = script([record])[0];
+        equal(applyEmitterCommand(createEmitterConfiguration(), command.opcode, command.payload.createDataView()).ok, true);
+        const result = emitters([japes[0], record, japes[2]]);
+        equal(result.emitters.length, 0);
+        deepEqual(result.provenance[0], { placementIndex: 0, initialEntry: 0, target: { kind: "object", index: 0 },
+            commandIndices: [0, 1], unsupportedReason: "unsupported particle, flags, duration or wrapper size" });
+    }
+    for (const [opcode, record] of [
+        [0x15, "00150000004040080001"], [0x16, "00162a3f080a15030001"], [0x64, "0064f8000000f8000001"],
+    ] as const) {
+        const command = script([record])[0];
+        equal(applyEmitterCommand(createEmitterConfiguration(), opcode, command.payload.createDataView()).ok, true);
+        const result = emitters([...(opcode === 0x15 ? [] : [japes[0]]), record, japes[1], japes[2]]);
+        equal(result.emitters.length, 0);
+        equal(result.provenance[0].unsupportedReason, `unsupported command or setup order: 0x${opcode.toString(16)}`);
+    }
+});
+
+test("static setup ordering, single configuration and terminal requirements remain independent of application", () => {
+    const colour = "0064f8000000f8000000";
+    // Colour setup after particle setup is an existing admitted form.
+    equal(emitters([japes[0], japes[1], colour, japes[2]]).emitters.length, 1);
+    for (const records of [
+        [japes[1], japes[2]], [japes[0], japes[0], japes[1], japes[2]],
+        [sands[1], ...japes], [japes[0], japes[1], sands[1], japes[2]],
+        [japes[0], colour, colour, japes[1], japes[2]],
+        [japes[0], japes[1], japes[1], japes[2]],
+        [japes[0], japes[1], "00090000000000000001"],
+    ]) {
+        const result = emitters(records);
+        equal(result.emitters.length, 0); ok(result.provenance[0].unsupportedReason);
+    }
+    const config = createEmitterConfiguration(), command = script([japes[1]])[0];
+    equal(applyEmitterCommand(config, command.opcode, command.payload.createDataView()).ok, true);
+    equal(applyEmitterCommand(config, command.opcode, command.payload.createDataView(), true).ok, true);
+    const replacement = emitters([japes[0], japes[1], japes[1], japes[2]]);
+    equal(replacement.provenance[0].unsupportedReason, "unsupported command or setup order: 0x17");
+    const pastCursor = emitters([...Array(254).fill(japes[2]), ...japes], [{ ...placement, commandsLength: 254 }]);
+    equal(pastCursor.emitters.length, 0); equal(pastCursor.provenance[0].unsupportedReason, "script has no terminal stop");
+    deepEqual(pastCursor.provenance[0].commandIndices, [254, 255]);
+});
+
+test("static scaled wrapper and malformed decoded payload diagnostics are preserved", () => {
+    const result = emitters([japes[0], "001700e97a1601000000", japes[2]], [{ ...placement, scale: 1 }]);
+    equal(result.emitters.length, 0); equal(result.provenance[0].unsupportedReason, "scaled wrapper size is zero");
+    const commands = script(japes);
+    commands[0].payload = ArrayBufferSlice.fromView(new Uint8Array(7));
+    throws(() => readPersistentEmitters([placement], table, commands), RangeError);
 });

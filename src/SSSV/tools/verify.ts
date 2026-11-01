@@ -1,3 +1,6 @@
+import { readWalraceSpriteStartup } from '../objects/walrace_sprites.js';
+import { readBonusRings } from '../effects/bonus_rings.js';
+import { BonusRingVisuals, BONUS_RING_TEXTURE } from '../effects/bonus_ring_renderer.js';
 import { FloorButtonVisuals } from '../objects/floor_buttons.js';
 import { LagoonMachineRuntime, MACHINE_ARMS, MACHINE_PADS, MACHINE_LEVERS } from '../objects/lagoon_machine.js';
 import { LagoonMachineVisuals } from '../objects/lagoon_machine_renderer.js';
@@ -230,10 +233,35 @@ function verifyLevel(levelId: string): void {
     assert(leverHandles.size === objects.filter((p, i) => objectTable.get(p.id)?.renderMode === 12 && !hiddenObjectIndices.has(i)).length, `${entry.id}: lever handle coverage`);
     const animatedPathObjects = new Set(objectDrawCalls.flatMap((draw) => draw.objectPathMotion !== null ? [draw.objectPathMotion.placement] : []));
     assert(animatedPathObjects.size === (entry.id === "SNOW_JOKE" ? 3 : 0), `${entry.id}: unexpected path-motion selection`);
+    for (const call of objectDrawCalls.filter(c => c.objectPathMotion !== null || c.objectPathShadowMotion !== null)) {
+        const placement = (call.objectPathMotion ?? call.objectPathShadowMotion)!.placement;
+        const body = objectDrawCalls.find(c => c.objectPathMotion?.placement === placement);
+        assert(call.objectPathPreviewTime !== null && body?.objectPathPreviewTime === call.objectPathPreviewTime,
+            `${entry.id}: path body/shadow preview time is not shared`);
+    }
     drawCalls.push(...objectDrawCalls);
     const billboardSets = JSON.parse(readFileSync("data/SSSV/billboards.json", "utf8")) as SSSVBillboard[][];
-    const billboardDrawCalls = buildBillboards(sharedOutput, objects, objectTable, billboardSets, dat, commands);
+    const bonusRingConfig = readBonusRings(objects, objectTable, commands);
+    assert((bonusRingConfig !== null) === (entry.id === 'GIVE_A_DOG_A_BONUS'), `${entry.id}: bonus ring admission`);
+    const bonusGateIndices = new Set(bonusRingConfig?.sites.filter(s => s.ordinal === null).map(s => s.index));
+    const billboardDrawCalls = buildBillboards(sharedOutput, objects, objectTable, billboardSets, dat, commands, bonusGateIndices);
+    if (bonusRingConfig) {
+        const rings = new BonusRingVisuals(sharedOutput, bonusRingConfig, objectTable, dat, segmentBuffers[1]!);
+        assert(rings.calls.length === 20 && rings.calls.filter(c => c.visible).length === 9, 'Dog Bonus: hoop/gate startup coverage');
+        assert(rings.calls.filter(c => c.textureIndices[0] === BONUS_RING_TEXTURE).length === 16, 'Dog Bonus: hoop texture');
+        assert(rings.calls.filter(c => c.commandTextureFrame !== null).every(c => c.animationTextureIndices?.join(',') === '523,522,521,520'), 'Dog Bonus: gate textures');
+        assert(billboardDrawCalls.every(c => !bonusGateIndices.has(c.objectPlacementIndex!)), 'Dog Bonus: powercell fallback remained');
+        drawCalls.push(...rings.calls);
+    }
     assert(billboardDrawCalls.every(draw => draw.objectPlacementIndex === null || !hiddenObjectIndices.has(draw.objectPlacementIndex)), `${entry.id}: hidden object submitted a billboard`);
+    const walraceSprites = objects.flatMap((p, i) => readWalraceSpriteStartup(i, p, commands) ? [i] : []);
+    assert(walraceSprites.length === (entry.id === 'WALRACE_64' ? 27 : 0), `${entry.id}: Walrace startup sprite admission`);
+    for (const index of walraceSprites) {
+        const startup = readWalraceSpriteStartup(index, objects[index], commands)!;
+        const call = billboardDrawCalls.find(c => c.objectPlacementIndex === index);
+        const expectedTexture = startup.material === 11 ? 523 : startup.material === 35 ? 563 : 570;
+        assert(call?.textureIndices[0] === expectedTexture && call.animationTextureIndices === null, 'Walrace: startup sprite material');
+    }
     const expectedTallSprites: Record<string, number> = { HONEYMOON_LAGOON: 18, FAT_BEAR_MOUNTAIN: 9, ROCKY_HARD_PLACE: 16, JUNGLE_DOLDRUMS: 8, WEIGHT_FOR_IT: 8 };
     assert(billboardDrawCalls.filter(draw => draw.projectedObjectSprite !== null).length === (expectedTallSprites[entry.id] ?? 0), `${entry.id}: tall billboard coverage`);
     drawCalls.push(...billboardDrawCalls);
@@ -571,7 +599,7 @@ function verifyLevel(levelId: string): void {
         if (!build.isPlayer) drawCalls.push(...build.drawCalls);
     }
     const walruses = animalBuilds.filter(build => build.recipe.species === "WALRUS");
-    const expectedWalruses: Record<string, number> = { ICE_N_EASY_DOES_IT: 3, SOMETHING_FISHY: 1, WALRACE_64: 2 };
+    const expectedWalruses: Record<string, number> = { ICE_N_EASY_DOES_IT: 3, PENGUIN_PLAYPEN: 1, SOMETHING_FISHY: 1, WALRACE_64: 2 };
     assert(walruses.filter(build => !build.isPlayer).length === (expectedWalruses[entry.id] ?? 0), `${entry.id}: missing WALRUS placements`);
     for (const build of walruses) {
         assert(build.partMatrices.length === 8 && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete WALRUS`);
@@ -617,7 +645,7 @@ function verifyLevel(levelId: string): void {
         if (!build.isPlayer) drawCalls.push(...build.drawCalls);
     }
     const elephants = animalBuilds.filter(build => build.placement.id === 56);
-    const expectedElephants: Record<string, number> = { JUNGLE_JAPES: 2, JUNGLE_DOLDRUMS: 3, JUNGLE_JUMPS: 2 };
+    const expectedElephants: Record<string, number> = { JUNGLE_JAPES: 2, JUNGLE_DOLDRUMS: 3, JUNGLE_JUMPS: 2, WEIGHT_FOR_IT: 1 };
     assert(elephants.filter(build => !build.isPlayer).length === (expectedElephants[entry.id] ?? 0), `${entry.id}: missing ELEPHANT placements`);
     for (const build of elephants) {
         assert(build.partMatrices.length === 9 && build.partMatrices.every(p => p.triangles > 0), `${entry.id}: incomplete ELEPHANT`);
@@ -651,6 +679,13 @@ function verifyLevel(levelId: string): void {
     for (const build of piranhas) {
         assert(build.partMatrices.length === 5 && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete PIRANHA`);
         assert(build.drawCalls.filter(draw => draw.animalEyeAnimation !== null).length === 2, `${entry.id}: missing PIRANHA eyes`);
+        if (!build.isPlayer) drawCalls.push(...build.drawCalls);
+    }
+    const seagulls = animalBuilds.filter(build => build.recipe.species === "SEAGULL");
+    assert(seagulls.filter(build => !build.isPlayer).length === (entry.id === "PENGUIN_PLAYPEN" ? 1 : 0), `${entry.id}: missing SEAGULL placement`);
+    for (const build of seagulls) {
+        assert(build.partMatrices.length === 17 && build.partMatrices.every(part => part.triangles > 0), `${entry.id}: incomplete SEAGULL`);
+        assert(build.drawCalls.filter(draw => draw.animalEyeAnimation !== null).length === 2, `${entry.id}: missing SEAGULL eyes`);
         if (!build.isPlayer) drawCalls.push(...build.drawCalls);
     }
     const penguins = animalBuilds.filter(build => build.placement.id === 37 || build.placement.id === 64);

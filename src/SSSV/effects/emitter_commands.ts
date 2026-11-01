@@ -1,34 +1,14 @@
 import { SceneTickClock } from '../core/timing.js';
-import { CommandTickBudget, CommandVM, commandFailure, commandSuccess } from '../commands/command_vm.js';
+import { CommandTickBudget, CommandVM, commandFailure } from '../commands/command_vm.js';
 import type { CommandResult } from '../commands/command_vm.js';
 import { CommandWorld } from '../commands/command_world.js';
 import type { CommandEntityInit } from '../commands/command_world.js';
-import { createEmitterConfiguration, packParticleColor } from './particle_emitters.js';
+import { applyEmitterCommand, createEmitterConfiguration } from './particle_emitters.js';
 import type { EmitterConfiguration, PersistentEmitter } from './particle_emitters.js';
 import type { LevelAnimalPlacement } from '../core/level.js';
 import type { LevelCommand } from '../commands/paths.js';
 
-export function applyEmitterCommand(config: EmitterConfiguration, opcode: number, p: DataView, allowReplacement = false, allowedIds: readonly number[] = [122, 24, 37], allowedFlags: readonly number[] = [9, 0x89, 0xE9]): CommandResult<void> {
-    if (opcode === 0x15) {
-        config.offset = [p.getInt8(0), p.getInt8(1), p.getInt8(2)];
-        config.spread = [p.getUint8(3), p.getUint8(4), p.getUint8(5)];
-    } else if (opcode === 0x16) {
-        config.direction = [p.getUint8(0), p.getUint8(1), p.getUint8(2)];
-        config.directionSpread = [p.getUint8(3), p.getUint8(4), p.getUint8(5)];
-    } else if (opcode === 0x64) {
-        config.primaryColor = packParticleColor(p.getUint8(0), p.getUint8(1), p.getUint8(2));
-        config.environmentColor = packParticleColor(p.getUint8(3), p.getUint8(4), p.getUint8(5));
-    } else if (opcode === 0x17) {
-        const flags = p.getUint16(0), id = p.getUint8(2), duration = p.getUint16(6);
-        if (!allowedFlags.includes(flags) || !allowedIds.includes(id) || duration !== 0)
-            return commandFailure('Emitter configuration requires an unsupported particle lifecycle');
-        // Reconstructed particles need configuration history for later replacement.
-        if (!allowReplacement && config.flags !== 0) return commandFailure('Replacing a live emitter requires configuration history');
-        config.flags = flags; config.particleId = id; config.frequency = (p.getInt8(3) - 20) << 24 >> 24;
-        config.size = p.getUint8(4); config.argument = p.getUint8(5); config.duration = duration;
-    } else return commandFailure(`Unsupported emitter opcode ${opcode}`);
-    return commandSuccess(undefined);
-}
+export { applyEmitterCommand } from './particle_emitters.js';
 
 export class CommandEmitterWorld extends CommandWorld {
     public readonly emitters = new Map<string, EmitterConfiguration>();

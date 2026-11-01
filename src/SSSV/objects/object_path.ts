@@ -12,6 +12,17 @@ export interface ObjectPathPilot {
     loop: boolean;
 }
 
+export interface ObjectPathPreviewTime {
+    startTick: number | null;
+}
+
+// Body and shadow share the placed object's first eligible render time, including live mode.
+export function getObjectPathPreviewTick(time: ObjectPathPreviewTime, sceneTick: number): number {
+    if (time.startTick === null || sceneTick < time.startTick)
+        time.startTick = sceneTick;
+    return sceneTick - time.startTick;
+}
+
 export interface ObjectPathTransform extends ObjectMatrixTransform {
     pilot: ObjectPathPilot;
     placement: LevelObjectPlacement;

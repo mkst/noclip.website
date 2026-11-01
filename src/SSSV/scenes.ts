@@ -1,3 +1,5 @@
+import { readBonusRings } from './effects/bonus_rings.js';
+import { BonusRingVisuals } from './effects/bonus_ring_renderer.js';
 import { LagoonMachineRuntime } from './objects/lagoon_machine.js';
 import { LagoonMachineVisuals } from './objects/lagoon_machine_renderer.js';
 import { LiveAnimalSpawnRuntime } from "./animals/live_animal_spawns.js";
@@ -197,8 +199,12 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
         }
         const objectDrawCalls = buildObjects(sharedOutput, objectPlacements, objectTable, segmentBuffers, dat, commands, pathAnalysis);
         drawCalls.push(...objectDrawCalls);
-        const billboardDrawCalls = buildBillboards(sharedOutput, objectPlacements, objectTable, billboardSets, dat, commands);
+        const bonusRingConfig = readBonusRings(objectPlacements, objectTable, commands);
+        const bonusGateIndices = new Set(bonusRingConfig?.sites.filter(s => s.ordinal === null).map(s => s.index));
+        const billboardDrawCalls = buildBillboards(sharedOutput, objectPlacements, objectTable, billboardSets, dat, commands, bonusGateIndices);
         drawCalls.push(...billboardDrawCalls);
+        const bonusRings = bonusRingConfig ? new BonusRingVisuals(sharedOutput, bonusRingConfig, objectTable, dat, segment1) : null;
+        if (bonusRings) drawCalls.push(...bonusRings.calls);
         const objectMarkers = createObjectMarkers(objectPlacements, objectTable, commands);
         drawCalls.push(...buildObjectMarkers(sharedOutput, objectMarkers));
         if (biome === "europe" || biome === "ice" || biome === "jungle") {
@@ -310,7 +316,7 @@ class SSSVSceneDesc implements Viewer.SceneDesc {
         const fogColor = colorNewFromRGBA8((dat.fogColor[0] << 24) | (dat.fogColor[1] << 16) | (dat.fogColor[2] << 8) | 0xFF);
         const renderer = new SSSVRenderer(device, sharedOutput, drawCalls, fences, this.name, geometry.faces.length, initialWorldMatrix, clearColor, animalMarkers, hangingRibbons, fogNear, fogFar, fogColor, new PathOverlay(pathAnalysis, map), {
             particleSimulation, emitterPrograms: scriptSimulation?.programs, animalStaticBuilds, animalSpawnMarkers, levelEvents, rain, fenceSwitch, objectMarkers, arrival,
-            elevator, objectCommands, snowPlatforms, liveAnimalSpawns, lagoonMachine,
+            elevator, objectCommands, snowPlatforms, liveAnimalSpawns, lagoonMachine, bonusRings,
         });
         renderer.installButtonInput(context.inputManager.toplevel, context.viewerInput.camera);
         renderer.music = new MusicPlayer(dataFetcher, startupMusic);

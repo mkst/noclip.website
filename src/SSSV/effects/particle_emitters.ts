@@ -1,3 +1,5 @@
+import { commandFailure, commandSuccess } from '../commands/command_vm.js';
+import type { CommandResult } from '../commands/command_vm.js';
 import { matchCommandRecords } from '../commands/command_admission.js';
 import type { LevelObjectPlacement } from "../core/level.js";
 import type { SSSVObjectData } from "../objects/objects.js";
@@ -51,6 +53,28 @@ export function packParticleColor(r: number, g: number, b: number): number {
     return color === 0 ? 0 : color | 1;
 }
 
+export function applyEmitterCommand(config: EmitterConfiguration, opcode: number, p: DataView, allowReplacement = false, allowedIds: readonly number[] = [122, 24, 37], allowedFlags: readonly number[] = [9, 0x89, 0xE9]): CommandResult<void> {
+    if (opcode === 0x15) {
+        config.offset = [p.getInt8(0), p.getInt8(1), p.getInt8(2)];
+        config.spread = [p.getUint8(3), p.getUint8(4), p.getUint8(5)];
+    } else if (opcode === 0x16) {
+        config.direction = [p.getUint8(0), p.getUint8(1), p.getUint8(2)];
+        config.directionSpread = [p.getUint8(3), p.getUint8(4), p.getUint8(5)];
+    } else if (opcode === 0x64) {
+        config.primaryColor = packParticleColor(p.getUint8(0), p.getUint8(1), p.getUint8(2));
+        config.environmentColor = packParticleColor(p.getUint8(3), p.getUint8(4), p.getUint8(5));
+    } else if (opcode === 0x17) {
+        const flags = p.getUint16(0), id = p.getUint8(2), duration = p.getUint16(6);
+        if (!allowedFlags.includes(flags) || !allowedIds.includes(id) || duration !== 0)
+            return commandFailure('Emitter configuration requires an unsupported particle lifecycle');
+        // Reconstructed particles need configuration history for later replacement.
+        if (!allowReplacement && config.flags !== 0) return commandFailure('Replacing a live emitter requires configuration history');
+        config.flags = flags; config.particleId = id; config.frequency = (p.getInt8(3) - 20) << 24 >> 24;
+        config.size = p.getUint8(4); config.argument = p.getUint8(5); config.duration = duration;
+    } else return commandFailure(`Unsupported emitter opcode ${opcode}`);
+    return commandSuccess(undefined);
+}
+
 const swampEmitterScript = [
     "0015a600fb0303030000", "006467884d0000000000", "001600bf030400010000", "00170009251621000000",
     "0006000b000000000000", "00480153000000000000", "000115007fd204b00003", "00460b6d6dcaca01000b",
@@ -90,22 +114,18 @@ export function readPersistentEmitters(placements: readonly LevelObjectPlacement
             // Jump cursor 3 advances to cursor 4, so it never reconfigures the emitter.
             if (swampHelper !== null && cursor >= 4 && cursor <= 8) continue;
             if (command.opcode === 0x15 && !offsets && !particle && !audio && v.getUint16(6) === 0) {
-                config.offset = [v.getInt8(0), v.getInt8(1), v.getInt8(2)];
-                config.spread = [v.getUint8(3), v.getUint8(4), v.getUint8(5)];
+                applyEmitterCommand(config, command.opcode, v);
                 offsets = true;
             } else if (command.opcode === 0x16 && offsets && !direction && !particle && v.getUint16(6) === 0) {
-                config.direction = [v.getUint8(0), v.getUint8(1), v.getUint8(2)];
-                config.directionSpread = [v.getUint8(3), v.getUint8(4), v.getUint8(5)];
+                applyEmitterCommand(config, command.opcode, v);
                 direction = true;
             } else if (command.opcode === 0x64 && offsets && !colors && !audio && v.getUint16(6) === 0) {
-                config.primaryColor = packParticleColor(v.getUint8(0), v.getUint8(1), v.getUint8(2));
-                config.environmentColor = packParticleColor(v.getUint8(3), v.getUint8(4), v.getUint8(5));
+                applyEmitterCommand(config, command.opcode, v);
                 colors = true;
             } else if (command.opcode === 0x17 && offsets && !particle) {
-                config.flags = v.getUint16(0); config.particleId = v.getUint8(2);
-                config.frequency = (v.getInt8(3) - 20) << 24 >> 24; config.size = v.getUint8(4);
-                config.argument = v.getUint8(5); config.duration = v.getUint16(6);
-                if ((config.flags !== 9 && config.flags !== 0xE9) || (config.particleId !== 122 && config.particleId !== 24 && !(config.particleId === 37 && swampHelper !== null)) || config.duration !== 0 || (config.particleId === 122 && config.size === 0)) {
+                const applied = applyEmitterCommand(config, command.opcode, v, false,
+                    swampHelper === null ? [122, 24] : [122, 24, 37], [9, 0xE9]);
+                if (!applied.ok || (config.particleId === 122 && config.size === 0)) {
                     source.unsupportedReason = "unsupported particle, flags, duration or wrapper size"; return;
                 }
                 particle = true;

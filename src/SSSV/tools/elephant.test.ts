@@ -3,8 +3,11 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { RSPSharedOutput } from "../../BanjoKazooie/f3dex.js";
-import { ELEPHANT_STATIC_RECIPE } from "../animals/elephant.js";
-import { buildStaticAnimalModels } from "../animals/animal_renderer.js";
+import { ELEPHANT_STATIC_RECIPE, ELEPHANT_DEACTIVATED_RECIPE } from "../animals/elephant.js";
+import { getStaticAnimalRecipe } from "../animals/animal_contracts.js";
+import { buildAnimalMarkers, createAnimalMarkers } from "../animals/animals.js";
+import { sampleAnimalEyeFrame } from "../animals/animal_eyes.js";
+import { buildStaticAnimalModels, updateAnimalTail } from "../animals/animal_renderer.js";
 import { advanceAnimalTail, createAnimalTail, animalTailMatrix } from "../animals/animal_tails.js";
 import { findPayload, LevelPayloadType, parseAnimals, parseLevelContainer, parseLevelDat, parseMap } from "../core/level.js";
 
@@ -38,7 +41,7 @@ test("ELEPHANT preserves the source standing head and trunk anchor, and determin
     advanceAnimalTail(tail, 0); deepEqual(tail.points, initial); advanceAnimalTail(tail, 120); deepEqual(tail.points, later);
 });
 
-for (const [level, count] of [["JUNGLE_JAPES", 2], ["JUNGLE_DOLDRUMS", 3], ["JUNGLE_JUMPS", 2], ["WEIGHT_FOR_IT", 0]] as const) test(`${level} ELEPHANT coverage and materials`, () => {
+for (const [level, count] of [["JUNGLE_JAPES", 2], ["JUNGLE_DOLDRUMS", 3], ["JUNGLE_JUMPS", 2], ["WEIGHT_FOR_IT", 1]] as const) test(`${level} ELEPHANT coverage and materials`, () => {
     const payloads = parseLevelContainer(read(`data/SSSV/levels/${level}.bin`));
     const dat = parseLevelDat(findPayload(payloads, LevelPayloadType.Dat)!);
     const map = parseMap(findPayload(payloads, LevelPayloadType.Map)!);
@@ -55,5 +58,52 @@ for (const [level, count] of [["JUNGLE_JAPES", 2], ["JUNGLE_DOLDRUMS", 3], ["JUN
         const textures = model.textureIds.map(id => output.textureCache.textures[id]);
         for (const palette of [0x040067C0, 0x040067E0]) ok(textures.some(t => t.dramPalAddr === palette));
     }
+    const markers = createAnimalMarkers(placements, null);
+    buildAnimalMarkers(output, markers, new Set(models.map(model => model.placementIndex)));
+    ok(markers.every(marker => marker.hasModel));
     equal(buildStaticAnimalModels(new RSPSharedOutput(), segments, placements, map, { ...dat, segment: 1 }).length, 0);
+});
+
+test("deactivated ELEPHANT uses the complete source blend target and closed eyes", () => {
+    equal(getStaticAnimalRecipe({ id: 56, health: 1 }), ELEPHANT_STATIC_RECIPE);
+    for (const health of [0, -1]) equal(getStaticAnimalRecipe({ id: 56, health }), ELEPHANT_DEACTIVATED_RECIPE);
+    // Original DB494 C, D_803B5698/56A8/56B8 topology and D_803B56D0 target,
+    // evaluated at full strength with core/mtx.h's integer degree table.
+    deepEqual(Object.entries(ELEPHANT_DEACTIVATED_RECIPE.pose.sample.jointPositions).map(([id, p]) => [Number(id), p.x, p.z, p.y]), [
+        [0,0,0,1500], [1,0,625,1500], [2,0,-625,1500],
+        [3,-485,625,1222], [4,485,625,1222], [5,-485,-625,1222], [6,485,-625,1222],
+        [7,-1219,1441,302], [10,1396,1387,420], [13,-1367,-1220,263], [16,1327,-1329,302],
+        [19,0,874,1521], [20,0,1292,900],
+    ]);
+    deepEqual(ELEPHANT_DEACTIVATED_RECIPE.parts, ELEPHANT_STATIC_RECIPE.parts);
+    equal(ELEPHANT_DEACTIVATED_RECIPE.pose.sample.eyeFrame, 4);
+    for (const change of ELEPHANT_DEACTIVATED_RECIPE.stateChanges.filter(c => c.kind === "load-eye-palette-frame")) {
+        ok(change.kind === "load-eye-palette-frame"); equal(change.textureAddress, 0x01002100 + 4 * 128);
+    }
+    for (const tick of [0,58,971,4096]) for (const side of ["left", "right"] as const)
+        equal(sampleAnimalEyeFrame(tick, "eyes5", side, true), 4);
+});
+
+test("Weight for It deactivated trunk follows the lowered head and supports repeated frames and seeks", () => {
+    const payloads = parseLevelContainer(read("data/SSSV/levels/WEIGHT_FOR_IT.bin"));
+    const dat = parseLevelDat(findPayload(payloads, LevelPayloadType.Dat)!);
+    const map = parseMap(findPayload(payloads, LevelPayloadType.Map)!);
+    const placements = parseAnimals(findPayload(payloads, LevelPayloadType.Can)!).filter(p => p.id === 56);
+    const segments: ArrayBufferSlice[] = [];
+    segments[1] = read("data/SSSV/segments/segment1.bin"); segments[4] = read("data/SSSV/segments/jungle_biome.bin");
+    const output = new RSPSharedOutput();
+    const [model] = buildStaticAnimalModels(output, segments, placements, map, dat);
+    equal(model.recipe, ELEPHANT_DEACTIVATED_RECIPE);
+    const animation = model.tail!;
+    equal(animation.simulation.anchor[2], model.resolvedY * 65536 + 900 * 2048 - 0x1B5800);
+    for (const draw of model.drawCalls.filter(d => d.animalEyeAnimation !== null)) {
+        const eye = draw.animalEyeAnimation!; ok(eye.kind === "texture"); equal(eye.deactivated, true);
+        equal(draw.textureIndices[0], eye.textureIndices[4]);
+    }
+    const vertices = new Float32Array(output.vertices.length * 10).fill(-999);
+    ok(updateAnimalTail(animation, vertices, 120));
+    const later = vertices.slice();
+    equal(updateAnimalTail(animation, vertices, 120), false);
+    updateAnimalTail(animation, vertices, 0); updateAnimalTail(animation, vertices, 120);
+    deepEqual(vertices, later); ok(vertices.every(Number.isFinite));
 });

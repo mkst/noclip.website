@@ -611,7 +611,7 @@ export function buildStaticAnimalModels(
         let recipe = getStaticAnimalRecipe(placement);
         if (recipe === null || (recipe.biomeSegment !== "shared" && dat.segment !== (recipe.biomeSegment ?? 0)))
             return;
-        if (recipe.species === "WALRUS") recipe = getWalrusStaticRecipe(dat.textureBank, placementIndex);
+        if (recipe.species === "WALRUS") recipe = getWalrusStaticRecipe(dat.textureBank, placementIndex, placement.health);
         const build = buildStaticAnimalModel(sharedOutput, segmentBuffers, placement, placementIndex, map, dat, textureRemapper, recipe);
         if (build !== null)
             builds.push(build);

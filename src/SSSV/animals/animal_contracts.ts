@@ -1,7 +1,8 @@
+import { SEAGULL_STATIC_RECIPE } from "./seagull.js";
 import { PIRANHA_STATIC_RECIPE } from "./piranha.js";
-import { WALRUS_STATIC_RECIPE } from "./walrus.js";
+import { WALRUS_STATIC_RECIPE, WALRUS_DEACTIVATED_RECIPE } from "./walrus.js";
 import { EVO_MICROCHIP_STATIC_RECIPE } from "./evo_microchip.js";
-import { ELEPHANT_STATIC_RECIPE } from "./elephant.js";
+import { ELEPHANT_STATIC_RECIPE, ELEPHANT_DEACTIVATED_RECIPE } from "./elephant.js";
 import { RACING_TORTOISE_STATIC_RECIPE } from "./racing_tortoise.js";
 import { HYENA_BIKER_STATIC_RECIPE } from "./hyena_biker.js";
 import { TORTOISE_TANK_STATIC_RECIPE } from "./tortoise_tank.js";
@@ -60,7 +61,7 @@ export type AnimalSourceSegment = 0x01 | 0x04;
 export type AnimalPartScale =
     | { kind: "shared-body-scale" }
     | { kind: "shared-head-scale" }
-    | { kind: "unit-16.16"; value: 0x10000 | 0x13000 | 0xE800 | 0x2800 | 0xD000 | 0x29800 | 0x12200 | 0x11800 | 0x26400 | 0x26800 | 0x28000 | 0x6400 | 0x18800 };
+    | { kind: "unit-16.16"; value: 0x10000 | 0x13000 | 0xE800 | 0x2800 | 0xD000 | 0x29800 | 0x12200 | 0x11800 | 0x26400 | 0x26800 | 0x28000 | 0x6400 | 0x18800 | 0x14000 };
 
 export interface AnimalPartAttachment {
     order: number;
@@ -239,8 +240,9 @@ export function getDogStaticRecipe(health: number): AnimalModelRecipe {
 }
 
 export function getStaticAnimalRecipe(placement: Pick<LevelAnimalPlacement, "id" | "health">): AnimalModelRecipe | null {
+    if (placement.id === SEAGULL_STATIC_RECIPE.animalId && placement.health > 0) return SEAGULL_STATIC_RECIPE;
     if (placement.id === PIRANHA_STATIC_RECIPE.animalId && placement.health > 0) return PIRANHA_STATIC_RECIPE;
-    if (placement.id === WALRUS_STATIC_RECIPE.animalId && placement.health > 0) return WALRUS_STATIC_RECIPE;
+    if (placement.id === WALRUS_STATIC_RECIPE.animalId) return placement.health > 0 ? WALRUS_STATIC_RECIPE : WALRUS_DEACTIVATED_RECIPE;
     if (placement.id === EVO_MICROCHIP_STATIC_RECIPE.animalId && placement.health > 0) return EVO_MICROCHIP_STATIC_RECIPE;
     if (placement.id === DOG_STATIC_RECIPE.animalId) return getDogStaticRecipe(placement.health);
     if (placement.id === SHEEP_STATIC_RECIPE.animalId && placement.health > 0) return SHEEP_STATIC_RECIPE;
@@ -273,6 +275,6 @@ export function getStaticAnimalRecipe(placement: Pick<LevelAnimalPlacement, "id"
     if (placement.id === TORTOISE_TANK_STATIC_RECIPE.animalId && placement.health > 0) return TORTOISE_TANK_STATIC_RECIPE;
     if (placement.id === RACING_TORTOISE_STATIC_RECIPE.animalId && placement.health > 0) return RACING_TORTOISE_STATIC_RECIPE;
     if (placement.id === HYENA_BIKER_STATIC_RECIPE.animalId && placement.health > 0) return HYENA_BIKER_STATIC_RECIPE;
-    if (placement.id === ELEPHANT_STATIC_RECIPE.animalId && placement.health > 0) return ELEPHANT_STATIC_RECIPE;
+    if (placement.id === ELEPHANT_STATIC_RECIPE.animalId) return placement.health > 0 ? ELEPHANT_STATIC_RECIPE : ELEPHANT_DEACTIVATED_RECIPE;
     return null;
 }

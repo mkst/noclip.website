@@ -1,3 +1,4 @@
+import { readWalraceSpriteStartup } from './walrace_sprites.js';
 import { COMBINE_FLOOR_BUTTON_GLOW, computeFloorButtonMatrix } from './floor_buttons.js';
 import type { FloorButtonState } from './floor_buttons.js';
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
@@ -16,6 +17,7 @@ import { readBillboardStartupColor, readSwitchStartupAppearance, readObjectVisib
 import { readComputerIdleAnimation, readObjectTextureAnimation } from "./object_texture_animation.js";
 import { computeObjectMotionMatrix, computeObjectShadowMotionMatrix, readObjectMotion } from "./object_motion.js";
 import { computeObjectPathMatrix, computeObjectPathShadowMatrix, readObjectPathPilot } from "./object_path.js";
+import type { ObjectPathPreviewTime } from "./object_path.js";
 import { computeObjectRotationMatrix, readObjectRotation } from "./object_rotation.js";
 import { GAME_TICK_RATE } from "../core/timing.js";
 import { computeLeverHandleMatrix } from "./lever_handle.js";
@@ -322,7 +324,7 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
     const drawCalls: SSSVDrawCall[] = [];
     const startingPlayer = createPlayerPlacement(dat, placements);
 
-    const addShadow = (placement: LevelObjectPlacement, entry: SSSVObjectData, motion: ReturnType<typeof readObjectMotion>, pathPilot: ReturnType<typeof readObjectPathPilot>): void => {
+    const addShadow = (placement: LevelObjectPlacement, entry: SSSVObjectData, motion: ReturnType<typeof readObjectMotion>, pathPilot: ReturnType<typeof readObjectPathPilot>, pathPreviewTime: ObjectPathPreviewTime | null): void => {
         const textureId = SHADOW_TEXTURE_ID_BASE + entry.shadowImageIndex;
         const texture = sharedOutput.textureCache.textures[textureId];
         if (texture === undefined)
@@ -398,6 +400,7 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
             computeObjectShadowMotionMatrix(drawCall.modelMatrix, drawCall.objectShadowMotion, 0);
         } else if (pathPilot !== null) {
             drawCall.objectPathShadowMotion = { pilot: pathPilot, placement };
+            drawCall.objectPathPreviewTime = pathPreviewTime;
             drawCall.modelMatrix = mat4.create();
             computeObjectPathShadowMatrix(drawCall.modelMatrix, drawCall.objectPathShadowMotion, 0);
         }
@@ -420,8 +423,9 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
         const motion = entry.renderMode === 6 && entry.id !== 2 ? readObjectMotion(authoredPlacement, commands) : null;
         const pathCandidate = entry.id === 94 ? readObjectPathPilot(authoredPlacement, placementIndex, commands, pathAnalysis) : null;
         const pathPilot = pathCandidate !== null && (pathCandidate.path.index === 0 || pathCandidate.path.index === 1 || pathCandidate.path.index === 9) ? pathCandidate : null;
+        const pathPreviewTime: ObjectPathPreviewTime | null = pathPilot !== null ? { startTick: null } : null;
         if ((entry.shadowType === 1 || entry.shadowType === 2) && (placement.unkC & 0xC0) !== 0x80)
-            addShadow(placement, entry, motion, pathPilot);
+            addShadow(placement, entry, motion, pathPilot, pathPreviewTime);
 
         const materialFlags = entry.renderMode === 6 ? placement.unkC & 0xC0 : 0;
         const initialOtherModeL = materialFlags === 0x40 ? RENDER_ALPHA : materialFlags === 0x80 ? RENDER_TRANSLUCENT : RENDER_OPAQUE;
@@ -506,6 +510,7 @@ export function buildObjects(sharedOutput: RSPSharedOutput, placements: LevelObj
                     const runtimeScale = entry.scaleOverride !== 0 ? entry.scaleOverride : (placement.scale !== 0 ? placement.scale : 0x800);
                     const scale = runtimeScale / 0x800;
                     drawCall.objectPathMotion = { pilot: pathPilot, placement, scale, originY: entry.collideHeight * scale / 2, localMatrix: spec.localMatrix };
+                    drawCall.objectPathPreviewTime = pathPreviewTime;
                     drawCall.modelMatrix = mat4.create();
                     computeObjectPathMatrix(drawCall.modelMatrix, drawCall.objectPathMotion, 0);
                 } else if (motion !== null) {
@@ -714,7 +719,7 @@ export interface SSSVBillboard {
     category: number;
 }
 
-export function buildBillboards(sharedOutput: RSPSharedOutput, placements: LevelObjectPlacement[], objectTable: Map<number, SSSVObjectData>, billboardSets: SSSVBillboard[][], dat: LevelDat, commands: readonly LevelCommand[] = []): SSSVDrawCall[] {
+export function buildBillboards(sharedOutput: RSPSharedOutput, placements: LevelObjectPlacement[], objectTable: Map<number, SSSVObjectData>, billboardSets: SSSVBillboard[][], dat: LevelDat, commands: readonly LevelCommand[] = [], excludedPlacements?: ReadonlySet<number>): SSSVDrawCall[] {
     const [fogNear, fogFar] = makeFogNearFar(dat);
     const fogColor = colorNewFromRGBA8((dat.fogColor[0] << 24) | (dat.fogColor[1] << 16) | (dat.fogColor[2] << 8) | 0xFF);
     const light = makeLight(dat);
@@ -753,10 +758,12 @@ export function buildBillboards(sharedOutput: RSPSharedOutput, placements: Level
     };
 
     for (const [placementIndex, authoredPlacement] of placements.entries()) {
+        if (excludedPlacements?.has(placementIndex)) continue;
         const visibility = readObjectVisibility(authoredPlacement, commands);
         if (visibility.hidden)
             continue;
-        const placement = { ...authoredPlacement, unkC: visibility.material };
+        const startup = readWalraceSpriteStartup(placementIndex, authoredPlacement, commands);
+        const placement = { ...authoredPlacement, ...startup, unkC: startup?.material ?? visibility.material };
         const entry = objectTable.get(placement.id);
         if (entry === undefined)
             continue;

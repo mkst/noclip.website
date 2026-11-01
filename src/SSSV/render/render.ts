@@ -1,3 +1,5 @@
+import type { BonusRingVisuals } from '../effects/bonus_ring_renderer.js';
+import { createBonusRingInteractions } from '../ui/bonus_ring_interactions.js';
 import { createInteractionInput } from '../ui/interaction_targets.js';
 import type { InteractionTarget } from '../ui/interaction_targets.js';
 import { focusInteraction } from '../ui/interaction_controls.js';
@@ -61,7 +63,7 @@ import { isAnimalMarkerVisible } from "../animals/animals.js";
 import type { AnimalMarker, AnimalMarkerMode } from "../animals/animals.js";
 import { textureAnimationFrame } from "../objects/object_texture_animation.js";
 import { computeObjectMotionMatrix, computeObjectShadowMotionMatrix } from "../objects/object_motion.js";
-import { computeObjectPathMatrix, computeObjectPathShadowMatrix } from "../objects/object_path.js";
+import { computeObjectPathMatrix, computeObjectPathShadowMatrix, getObjectPathPreviewTick } from "../objects/object_path.js";
 import { computeObjectRotationMatrix } from "../objects/object_rotation.js";
 import { computeLeverHandleMatrix } from "../objects/lever_handle.js";
 import { updateGravitySwitchVisual } from "../objects/gravity_switch.js";
@@ -609,7 +611,6 @@ class SSSVDrawCallInstance {
     private texturesEnabled = true;
     private fogEnabled = false;
     private wireframeEnabled = false;
-    private pathStartTick = -1;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
@@ -789,9 +790,7 @@ class SSSVDrawCallInstance {
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
         vec3.copy(drawCenterScratch, this.drawCall.center);
         const objectTick = getGameTick(viewerInput.time);
-        if (this.pathStartTick === -1 || objectTick < this.pathStartTick)
-            this.pathStartTick = objectTick;
-        const pathTick = objectTick - this.pathStartTick;
+        const pathTick = this.drawCall.objectPathPreviewTime !== null ? getObjectPathPreviewTick(this.drawCall.objectPathPreviewTime, objectTick) : 0;
         if (this.drawCall.gravitySwitch !== null && this.drawCall.gravitySwitch.part !== 'ball') {
             vec3.transformMat4(drawCenterScratch, drawCenterScratch, this.drawCall.modelMatrix!);
         } else if (this.drawCall.leverHandle !== null && this.drawCall.modelMatrix !== null) {
@@ -931,6 +930,7 @@ export interface SSSVRendererOptions {
     snowPlatforms?: SnowPlatformVisuals | null;
     liveAnimalSpawns?: LiveAnimalSpawnVisuals | null;
     lagoonMachine?: LagoonMachineVisuals | null;
+    bonusRings?: BonusRingVisuals | null;
 }
 
 export class SSSVRenderer implements Viewer.SceneGfx {
@@ -970,6 +970,8 @@ export class SSSVRenderer implements Viewer.SceneGfx {
     public readonly snowPlatforms: SnowPlatformVisuals | null;
     public readonly liveAnimalSpawns: LiveAnimalSpawnVisuals | null;
     public readonly lagoonMachine: LagoonMachineVisuals | null;
+    public readonly bonusRings: BonusRingVisuals | null;
+    private readonly bonusRingInteractions: FeatureInteraction | null;
     private readonly machineInteractions: FeatureInteraction | null;
     private readonly liveInteractions: FeatureInteraction | null;
     private readonly snowInteractions: FeatureInteraction | null;
@@ -995,10 +997,11 @@ export class SSSVRenderer implements Viewer.SceneGfx {
         this.snowPlatforms = options.snowPlatforms ?? null;
         this.liveAnimalSpawns = options.liveAnimalSpawns ?? null;
         this.lagoonMachine = options.lagoonMachine ?? null;
+        this.bonusRings = options.bonusRings ?? null;
 
         this.renderHelper = new GfxRenderHelper(device);
         this.levelEvents?.setEnabled(true);
-        this.renderData = new RenderData(device, this.renderHelper.renderCache, sharedOutput, 1, arrival !== null || animalStaticBuilds.some(build => build.wool !== null || build.tail !== null || build.flame !== null || build.mysteryBear !== null));
+        this.renderData = new RenderData(device, this.renderHelper.renderCache, sharedOutput, 1, arrival !== null || this.bonusRings !== null || animalStaticBuilds.some(build => build.wool !== null || build.tail !== null || build.flame !== null || build.mysteryBear !== null));
         for (const drawCall of drawCalls)
             this.drawCallInstances.push(new SSSVDrawCallInstance(device, this.renderHelper.renderCache, sharedOutput, drawCall, this.textureCache));
         this.buttonVisuals = new LeverVisuals(rain !== null ? drawCalls.filter(c => c.objectPlacementIndex === rain.button.config.placementIndex) : []);
@@ -1016,6 +1019,7 @@ export class SSSVRenderer implements Viewer.SceneGfx {
 
         const context: InteractionContext = { camera: () => this.buttonCamera,
             objectsEnabled: () => this.objectsEnabled, sceneTick: () => this.lastSceneTick };
+        this.bonusRingInteractions = this.bonusRings ? createBonusRingInteractions(this.bonusRings, context) : null;
         this.machineInteractions = this.lagoonMachine !== null ? createMachineInteractions(this.lagoonMachine, context) : null;
         this.liveInteractions = this.liveAnimalSpawns !== null ? createAnimalInteractions(this.liveAnimalSpawns,
             { camera: context.camera, animalsVisible: () => this.animalsVisible, markerMode: () => this.animalMarkerMode }) : null;
@@ -1110,6 +1114,7 @@ export class SSSVRenderer implements Viewer.SceneGfx {
         this.updateFloorButtons();
         this.setTeleporterPreviewActive(this.teleporterPreviewActive);
         this.updateArrivalState();
+        this.bonusRings?.update(enabled);
         this.elevator?.update(enabled);
         this.snowPlatforms?.update(enabled);
         if (this.levelEvents !== null) {
@@ -1315,6 +1320,7 @@ export class SSSVRenderer implements Viewer.SceneGfx {
         }
 
         this.elevatorInteractions?.appendTo(panel.contents);
+        this.bonusRingInteractions?.appendTo(panel.contents);
         this.machineInteractions?.appendTo(panel.contents);
         this.liveInteractions?.appendTo(panel.contents);
         this.snowInteractions?.appendTo(panel.contents);
@@ -1328,6 +1334,15 @@ export class SSSVRenderer implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const tick = this.lastSceneTick = getGameTick(viewerInput.time);
+        if (this.bonusRings) {
+            this.bonusRings.runtime.advanceTo(tick);
+            if (this.bonusRings.update(this.objectsEnabled, this.renderData.vertexBufferData)) {
+                const byteOffset = this.bonusRings.firstVertex * 40;
+                device.uploadBufferData(this.renderData.vertexBuffer, byteOffset,
+                    new Uint8Array(this.renderData.vertexBufferData.buffer, byteOffset, this.bonusRings.vertexCount * 40));
+            }
+            this.bonusRingInteractions?.sync();
+        }
         this.lagoonMachine?.runtime.advanceTo(tick);
         this.lagoonMachine?.update(this.objectsEnabled);
         this.updateFloorButtons();

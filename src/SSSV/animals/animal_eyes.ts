@@ -1,4 +1,4 @@
-export type AnimalEyeFamily = "standard" | "eyes5" | "eyes6" | "standard-tlut4" | "eyes2-tlut4" | "eyes5-tlut2" | "primitive";
+export type AnimalEyeFamily = "standard" | "eyes5" | "eyes6" | "standard-tlut4" | "standard-tlut1" | "eyes2-tlut4" | "eyes5-tlut2" | "primitive";
 export type AnimalEyeSide = "left" | "right";
 
 export type AnimalEyeAnimation = {
@@ -15,6 +15,7 @@ export type AnimalEyeAnimation = {
 
 export const ANIMAL_EYE_ATLASES = {
     "eyes2-tlut4": { base: 0x01000D20, palette: 0x01000D00, frames: 13 },
+    "standard-tlut1": { base: 0x01000620, palette: 0x01000CA0, frames: 13 },
     standard: { base: 0x01000620, palette: 0x01000CC0, frames: 13 },
     "eyes5-tlut2": { base: 0x01002100, palette: 0x01000CC0, frames: 9 },
     eyes5: { base: 0x01002100, palette: 0x01000CA0, frames: 9 },

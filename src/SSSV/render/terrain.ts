@@ -7,7 +7,7 @@ import { mat4, vec3, vec4 } from "gl-matrix";
 import { MAP_X_POINTS, MAP_Z_POINTS, mirrorZ } from "../core/level.js";
 import type { GeometryFace, LevelDat, LevelGeometry, LevelMapEntry, LevelScrollStep } from "../core/level.js";
 import type { ObjectMotionTransform, ObjectShadowMotion } from "../objects/object_motion.js";
-import type { ObjectPathShadowMotion, ObjectPathTransform } from "../objects/object_path.js";
+import type { ObjectPathPreviewTime, ObjectPathShadowMotion, ObjectPathTransform } from "../objects/object_path.js";
 import { parseI8Texture } from "../core/texture.js";
 import type { ObjectRotationTransform } from "../objects/object_rotation.js";
 import type { LeverHandleTransform } from "../objects/lever_handle.js";
@@ -148,6 +148,7 @@ export class SSSVDrawCall extends DrawCall {
     public objectShadowMotion: ObjectShadowMotion | null = null;
     public objectPathMotion: ObjectPathTransform | null = null;
     public objectPathShadowMotion: ObjectPathShadowMotion | null = null;
+    public objectPathPreviewTime: ObjectPathPreviewTime | null = null;
     public center = vec3.create();
     public centerCount = 0;
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);

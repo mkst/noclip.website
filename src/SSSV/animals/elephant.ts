@@ -32,3 +32,24 @@ export const ELEPHANT_STATIC_RECIPE: AnimalModelRecipe = {
         { order: 12, kind: "load-eye-palette-frame", textureAddress: 0x01002100, paletteAddress: 0x01000CA0 },
     ],
 };
+
+export const ELEPHANT_DEACTIVATED_RECIPE: AnimalModelRecipe = {
+    ...ELEPHANT_STATIC_RECIPE,
+    pose: { sample: {
+        ...ELEPHANT_STATIC_RECIPE.pose.sample,
+        // Full-strength DB670 target D_803B56D0, using the source degree lookup table.
+        jointPositions: {
+            0: { x: 0, z: 0, y: 1500 },
+            1: { x: 0, z: 625, y: 1500 }, 2: { x: 0, z: -625, y: 1500 },
+            3: { x: -485, z: 625, y: 1222 }, 4: { x: 485, z: 625, y: 1222 },
+            5: { x: -485, z: -625, y: 1222 }, 6: { x: 485, z: -625, y: 1222 },
+            7: { x: -1219, z: 1441, y: 302 }, 10: { x: 1396, z: 1387, y: 420 },
+            13: { x: -1367, z: -1220, y: 263 }, 16: { x: 1327, z: -1329, y: 302 },
+            19: { x: 0, z: 874, y: 1521 }, 20: { x: 0, z: 1292, y: 900 },
+        },
+        eyeFrame: 4,
+    } },
+    stateChanges: ELEPHANT_STATIC_RECIPE.stateChanges.map(change => change.kind === "load-eye-palette-frame"
+        ? { ...change, textureAddress: change.textureAddress + 4 * 128 }
+        : change),
+};

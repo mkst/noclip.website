@@ -40,12 +40,34 @@ export const WALRUS_STATIC_RECIPE: AnimalModelRecipe = {
     ],
 };
 
+export const WALRUS_DEACTIVATED_RECIPE: AnimalModelRecipe = {
+    ...WALRUS_STATIC_RECIPE,
+    pose: { sample: {
+        ...WALRUS_STATIC_RECIPE.pose.sample,
+        // Full-strength DB670 target D_803B5054; the normal support/head corrections are skipped.
+        jointPositions: {
+            0: { x: 0, z: 0, y: 320 },
+            1: { x: 0, z: 574, y: 320 }, 2: { x: 0, z: -574, y: 320 },
+            19: { x: -606, z: 922, y: 908 }, 20: { x: -915, z: 1099, y: 414 },
+            26: { x: 498, z: 1128, y: 162 },
+            5: { x: 27, z: -604, y: 622 }, 6: { x: -240, z: -574, y: 133 },
+            14: { x: 762, z: -732, y: 464 }, 17: { x: -840, z: -574, y: -336 },
+        },
+    } },
+};
+
 const RACE_RECIPES = [[92, 170, 121, 255], [200, 140, 0, 255]].map((rgba): AnimalModelRecipe => ({
     ...WALRUS_STATIC_RECIPE,
     stateChanges: WALRUS_STATIC_RECIPE.stateChanges.map(change => change.kind === "set-primitive-color" ? { ...change, rgba: rgba as [number, number, number, number] } : change),
 }));
 
-export function getWalrusStaticRecipe(textureBank: number, placementIndex: number): AnimalModelRecipe {
+const DEACTIVATED_RACE_RECIPES = RACE_RECIPES.map((recipe): AnimalModelRecipe => ({
+    ...WALRUS_DEACTIVATED_RECIPE, stateChanges: recipe.stateChanges,
+}));
+
+export function getWalrusStaticRecipe(textureBank: number, placementIndex: number, health = 127): AnimalModelRecipe {
     // The initial chip occupies slot 0; authored records 0/1 become race rivals in slots 1/2.
-    return textureBank === 4 && placementIndex >= 0 && placementIndex < 2 ? RACE_RECIPES[placementIndex] : WALRUS_STATIC_RECIPE;
+    const race = health > 0 ? RACE_RECIPES : DEACTIVATED_RACE_RECIPES;
+    return textureBank === 4 && placementIndex >= 0 && placementIndex < 2 ? race[placementIndex]
+        : health > 0 ? WALRUS_STATIC_RECIPE : WALRUS_DEACTIVATED_RECIPE;
 }
